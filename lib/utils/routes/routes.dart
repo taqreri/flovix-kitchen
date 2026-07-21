@@ -1,3 +1,5 @@
+import 'package:flovix_kitchen/screens/login/login_screen.dart';
+import 'package:flovix_kitchen/screens/splash/splash_screen.dart';
 import 'package:flovix_kitchen/utils/routes/routes_name.dart';
 import 'package:flutter/material.dart';
 
@@ -5,11 +7,11 @@ import 'package:flutter/material.dart';
 class Routes {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
-/*      case RoutesName.splashScreen:
-        return MaterialPageRoute(builder: (_) => const SplashPage());
+      case RoutesName.splashScreen:
+        return MaterialPageRoute(builder: (_) => const SplashScreen());
 
       case RoutesName.loginScreen:
-        return MaterialPageRoute(builder: (_) => const LoginPage());*/
+          return MaterialPageRoute(builder: (_) => const LoginScreen());
 
 
 

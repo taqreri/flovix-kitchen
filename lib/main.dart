@@ -171,12 +171,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     return MultiBlocProvider(
       providers: [
-     /*   BlocProvider(create: (context) => LocaleCubit()),
-        BlocProvider(create: (context) => AppSettingBloc(AppSettingRepository())),
-        BlocProvider(create: (context) => NewCartBloc(PosMainRepository())),
-        BlocProvider(
-            create: (context) =>
-            CartBloc()..add(LoadCart())), // Initialize with load event*/
+        BlocProvider(create: (context) => LocaleCubit()),
       ],
       child: BlocListener<LocaleCubit, Locale>(
         listenWhen: (previous, current) => previous != current,

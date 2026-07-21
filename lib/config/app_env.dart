@@ -24,22 +24,22 @@ class AppEnv {
 
   static const String firebaseAndroidApiKey = String.fromEnvironment(
     'FIREBASE_ANDROID_API_KEY',
-    defaultValue: 'AIzaSyAmHun9B6-ML9Ha6IZZmko32tnZGThWyF0',
+    defaultValue: 'AIzaSyAI3avaY76o1EuCq5xlu3Tn5A7NR-SFDcI',
   );
 
   static const String firebaseAndroidAppId = String.fromEnvironment(
     'FIREBASE_ANDROID_APP_ID',
-    defaultValue: '1:246067218024:android:3bb97f52dcabc0782b1ddd',
+    defaultValue: '1:828657372193:android:f450565febbe6762462760',
   );
 
   static const String firebaseMessagingSenderId = String.fromEnvironment(
     'FIREBASE_MESSAGING_SENDER_ID',
-    defaultValue: '246067218024',
+    defaultValue: '828657372193',
   );
 
   static const String firebaseProjectId = String.fromEnvironment(
     'FIREBASE_PROJECT_ID',
-    defaultValue: 'taqreri-5b6fb',
+    defaultValue: 'flovix-kitchen',
   );
 
   static FirebaseOptions get androidFirebaseOptions => const FirebaseOptions(
