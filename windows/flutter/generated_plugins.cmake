@@ -3,9 +3,23 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  connectivity_plus
+  file_selector_windows
+  firebase_auth
+  firebase_core
+  flutter_secure_storage_windows
+  flutter_thermal_printer
+  permission_handler_windows
+  printing
+  share_plus
+  universal_ble
+  url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  flutter_local_notifications_windows
+  jni
+  widget_to_image_converter
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

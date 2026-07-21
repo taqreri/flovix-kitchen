@@ -1,122 +1,383 @@
+import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flovix_kitchen/screens/chucker_debug_service.dart';
+import 'package:flovix_kitchen/services/database/database_init_io.dart';
+import 'package:flovix_kitchen/utils/colors/colors.dart';
+import 'package:flovix_kitchen/utils/helper/helpers.dart';
+import 'package:flovix_kitchen/utils/platform/platform_info.dart';
+import 'package:flovix_kitchen/widgets/debug/windows_api_debug_overlay.dart';
+import 'package:flovix_kitchen/widgets/receipt/thermal_printer_io.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
+import 'package:chucker_flutter/chucker_flutter.dart';
+
+
+import 'bloc/locale_cubit.dart';
+import 'bloc/repository/login_repository.dart';
+import 'bloc/repository/select_branch_repository.dart';
+import 'config/app_env.dart';
+import 'notification_services/notification_service.dart';
+
+import 'utils/routes/routes.dart';
+import 'utils/routes/routes_name.dart';
+import 'utils/app_utils.dart' show rootScaffoldMessengerKey;
+
+final repaintBoundaryKey = GlobalKey();
+GetIt getIt = GetIt.instance;
+ThermalPrinter thermalPrinter = ThermalPrinter();
+// Add this with your global variables
+bool _isGlobalInitialized = false;
+late final siteConfig;
+late final settingsResponse;
+late final printerConfig;
+
+Future<void> main() async {
+
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeAppDatabase();
+  // Reduce decoded image memory pressure (important on iOS / low-RAM iPads).
+  // Debug/profile from Xcode already uses extra RAM; keep caches smaller.
+  if (PlatformInfo.isMobile) {
+    if (kDebugMode || kProfileMode) {
+      PaintingBinding.instance.imageCache.maximumSize = 40;
+      PaintingBinding.instance.imageCache.maximumSizeBytes = 16 << 20; // 16 MB
+    } else {
+      PaintingBinding.instance.imageCache.maximumSize = 80;
+      PaintingBinding.instance.imageCache.maximumSizeBytes = 24 << 20; // 24 MB
+    }
+  } else {
+    PaintingBinding.instance.imageCache.maximumSize = 200;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 80 << 20; // 80 MB
+  }
+  await EasyLocalization.ensureInitialized();
+  await ChuckerDebugService.initialize();
+  ChuckerDebugService.applyRuntimeConfig();
+  setupLocator();
+
+  // Get saved locale preference
+  final prefs = await SharedPreferences.getInstance();
+  final isEnglishLocale = prefs.getBool('isEnglish') ?? true;
+  final initialLocale = isEnglishLocale ? const Locale('en') : const Locale('ar');
+
+  // Set the global isEnglish variable based on saved preference
+  isEnglish = isEnglishLocale;
+
+  if (PlatformInfo.isMobile) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+  await ScreenUtil.ensureScreenSize();
+  ScreenUtil.enableScale(enableWH: () => true, enableText: () => true);
+
+  debugPrint('App flavor: ${AppEnv.flavor}');
+  debugPrint('API base URL: ${AppEnv.apiBaseUrl}');
+  debugPrint('Web base URL: ${AppEnv.webBaseUrl}');
+  if (PlatformInfo.isWindows && kDebugMode) {
+    debugPrint(
+      'Windows debug: API calls log to this console as [API] lines. '
+          'Tap the API button (bottom-right) or login logo 5× for Chucker UI.',
+    );
+  }
+
+  try {
+    await AppEnv.initializeFirebase();
+  } catch (e, stackTrace) {
+    debugPrint('Firebase initialization failed: $e');
+    debugPrint('$stackTrace');
+  }
+
+  final orientations = PlatformInfo.isMobile
+      ? const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]
+      : const [
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ];
+
+  SystemChrome.setPreferredOrientations(orientations).then((_) {
+    runApp(
+      EasyLocalization(
+        supportedLocales: const [
+          Locale('en'),
+          Locale('ar'),
+        ],
+        fallbackLocale: const Locale('en'),
+        path: 'assets/translations',
+        startLocale: initialLocale,
+        child: const MyApp(),
+      ),
+    );
+
+  });
+  //runApp(const MyApp());
+}
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (!PlatformInfo.isMobile) return;
+
+  await AppEnv.initializeFirebase();
+  NotificationServices().showNotifications(message);
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  @override
+  void didHaveMemoryPressure() {
+    // Release decoded image memory aggressively when OS reports pressure.
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+  }
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On background/inactive, release live images to reduce GPU/Metal memory.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+
+    return MultiBlocProvider(
+      providers: [
+     /*   BlocProvider(create: (context) => LocaleCubit()),
+        BlocProvider(create: (context) => AppSettingBloc(AppSettingRepository())),
+        BlocProvider(create: (context) => NewCartBloc(PosMainRepository())),
+        BlocProvider(
+            create: (context) =>
+            CartBloc()..add(LoadCart())), // Initialize with load event*/
+      ],
+      child: BlocListener<LocaleCubit, Locale>(
+        listenWhen: (previous, current) => previous != current,
+        listener: (context, locale) {
+          // Update EasyLocalization locale when LocaleCubit state changes
+          // This triggers rebuild of all widgets using .tr()
+          if (context.mounted) {
+            // Use addPostFrameCallback to ensure it happens after build
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) {
+                context.setLocale(locale);
+              }
+            });
+          }
+        },
+        child: BlocBuilder<LocaleCubit, Locale>(
+          builder: (context, locale) {
+            // Sync EasyLocalization on initial build
+            if (context.locale != locale && context.mounted) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (context.mounted) {
+                  context.setLocale(locale);
+                }
+              });
+            }
+
+            return SafeArea(
+              child: ScreenUtilInit(
+                designSize: Size(
+                  MediaQuery.of(context).size.width,
+                  MediaQuery.of(context).size.height,
+                ),
+                minTextAdapt: true,
+                splitScreenMode: true,
+                builder: (context, child) {
+                  return MaterialApp(
+                    scaffoldMessengerKey: rootScaffoldMessengerKey,
+                    supportedLocales: context.supportedLocales,
+                    localizationsDelegates: context.localizationDelegates,
+                    locale: locale, // Use locale from BlocBuilder directly
+                    debugShowCheckedModeBanner: false,
+                    title: 'pos'.tr(),
+                    themeMode: ThemeMode.light,
+                    navigatorObservers: [
+                      if (ChuckerDebugService.shouldRegisterNavigatorObserver)
+                        ChuckerFlutter.navigatorObserver,
+                    ],
+                    theme: ThemeData(
+
+                      textButtonTheme: TextButtonThemeData(
+                        style: TextButton.styleFrom(
+
+                          foregroundColor: AppColors.primaryColor, // text color
+
+                        ),
+                      ),
+
+                      textSelectionTheme: TextSelectionThemeData(
+                        cursorColor: AppColors.primaryColor,        // 👈 cursor color
+                        selectionColor: AppColors.primaryColor,
+                        selectionHandleColor: AppColors.primaryColor,
+                      ),
+
+                      dropdownMenuTheme: DropdownMenuThemeData(
+                        textStyle:  TextStyle(
+                          fontSize:10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black,
+                          letterSpacing: 0.2,
+
+                        ),
+
+                        menuStyle: MenuStyle(
+                          elevation: WidgetStateProperty.all(6),
+                          backgroundColor: WidgetStateProperty.all(Colors.white),
+                          shape: WidgetStateProperty.all(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+
+                        inputDecorationTheme: InputDecorationTheme(
+                          isDense: true,
+
+                          /// 🔹 Hint text
+                          hintStyle: const TextStyle(
+                            fontSize:10,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey,
+                          ),
+
+                          /// 🔹 Selected value text
+                          labelStyle:  TextStyle(
+                            fontSize:Helpers.isTablet()? null:12.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black,
+                          ),
+
+                          /// 🔹 Floating label (if used)
+                          floatingLabelStyle:  TextStyle(
+                            fontSize: Helpers.isTablet()? null:12.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blue,
+                          ),
+
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Colors.grey),
+                          ),
+
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: Colors.blue,
+                              width: 1.5,
+                            ),
+                          ),
+
+                          errorStyle: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ),
+
+                      checkboxTheme: CheckboxThemeData(
+                        fillColor: MaterialStateProperty.resolveWith(
+                              (states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return AppColors.primaryColor;
+                            }
+                            return Colors.transparent;
+                          },
+                        ),
+                        checkColor: MaterialStateProperty.all(Colors.white),
+                        side: const BorderSide(
+                          color: Color(0xffC7C7C7),
+                          width: 1.5,
+                        ),
+                        overlayColor: MaterialStateProperty.all(
+                          AppColors.primaryColor.withOpacity(0.12),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+
+                      progressIndicatorTheme: const ProgressIndicatorThemeData(
+                        color: AppColors.primaryColor,      // sets the progress color
+                        linearTrackColor: Color(0xffECEAEA), // optional for LinearProgressIndicator
+                        circularTrackColor: Color(0xffECEAEA), // optional track color for circular
+                        strokeWidth: 4.0,                    // default thickness
+                      ),
+
+                      floatingActionButtonTheme: FloatingActionButtonThemeData(
+                        backgroundColor: AppColors.primaryColor,
+                        foregroundColor: Colors.white, // icon/text color
+                        elevation: 6.0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16), // rounded edges
+                        ),
+                        extendedSizeConstraints: const BoxConstraints(
+                          minWidth: 120,
+                          minHeight: 50,
+                        ),
+                      ),
+                      fontFamily: 'Inter',
+                    ),
+                    //  theme: lightTheme,
+                    //  darkTheme: darkTheme,
+                    /*    localizationsDelegates: const [
+                    AppLocalizations.delegate,
+                    GlobalMaterialLocalizations.delegate,
+                    GlobalCupertinoLocalizations.delegate,
+                    GlobalWidgetsLocalizations.delegate,
+                  ],
+                  supportedLocales: AppLocalizations.supportedLocales,
+                  locale: locale,**/
+                    builder: (context, appChild) {
+                      return WindowsApiDebugOverlay(
+                        child: appChild ?? const SizedBox.shrink(),
+                      );
+                    },
+                    initialRoute: RoutesName.splashScreen,
+                    onGenerateRoute: Routes.generateRoute,
+                  );
+                },
+              ),
+            );
+          },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
     );
   }
 }
+
+bool isEnglish = true;
+void setupLocator() {
+  getIt.registerSingleton<LoginRepository>(LoginRepository());
+  getIt.registerSingleton<SelectBranchRepository>(SelectBranchRepository());
+}
+int? transactionTotalPagesCount=1;
+int? productTotalPagesCount=1;

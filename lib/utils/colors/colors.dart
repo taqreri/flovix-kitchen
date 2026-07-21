@@ -1,0 +1,96 @@
+import 'package:flutter/material.dart';
+
+class AppColors {
+  static const Color primaryColor = Color(0xFF086562);
+  static const Color primaryColor5BB0B0 = Color(0xFF5BB0B0);
+  static const Color lightPrimaryColor = Color.fromARGB(255, 214, 231, 230);
+  static const Color secondaryColor = Color(0xFF0E397E);
+  static const Color dividerColor = Color(0xFFE5E5E5);
+  static const Color dividerColorNew = Color(0xFFE7EAED);
+  static const Color whiteColor = Color(0xFFFFFFFF);
+  static const Color chargesColor = Color(0xFF566B86);
+  static const Color quantityBackgroundColor = Color(0xFFE6F0EF);
+  static const Color textFieldBorderColor = Color(0xFFEBEDEC);
+  static const Color whiteLightColor = Color(0xFFF9F9F9);
+  static const Color whiteD9D9D9Color = Color(0xFFD9D9D9);
+  static const Color bNColor = Color(0xFFC1C1C1);
+  static const Color menuColor = Color(0xFF178854);
+  static const Color imgBtnColor = Color(0xFF1A1C1E);
+  static const Color blueColor = Color(0xFF1F80FF);
+  static const Color whiteDEE2E6Color = Color(0xFFDEE2E6);
+  static const Color blackColor = Color(0xFF000000);
+  static const Color blackColorA1A1A1 = Color(0xFFA1A1A1);
+  static const Color blackColorC4C4C4 = Color(0xFFC4C4C4);
+  static const Color blackColor202020 = Color(0xFF202020);
+  static const Color blackColor6A6A6A = Color(0xFF6A6A6A);
+  static const Color holdColor = Color(0xFFFFF4D6);
+  static const Color holdTextColor = Color(0xFFB26A00);  static const Color returnColor = Color(0xFFFFE6E9);
+  static const Color returnTextColor = Color(0xFFB4232C);
+  static const Color orderColor = Color(0xFFE5E7EB);
+  static const Color orderTextColor = Color(0xFF0B5FA5);
+  static const Color blackColor402C2C = Color(0xFF402C2C);
+  static const Color timedEventColor = Color(0xFF5FAA46);
+  static const Color productDescriptionColor = Color(0xFF718196);
+  static const Color blackColor949494 = Color(0xFF949494);
+  static const Color blackColorDEDEDE = Color(0xFFDEDEDE);
+  static const Color productPriceColor = Color(0xFF03645D);
+  static const Color textFieldHintColorNew = Color(0xFF6B7280);
+  static const Color borderColorNew1 = Color(0xFFE5E7EB);
+  static const Color settingColorNew = Color(0xFF2A2F36);
+  static const Color redColor = Color(0xFFE57373);
+  static const Color discountColor = Color(0xFFE929DAE);
+  static const Color settingWidgetTitleColor = Color(0xFF0F172A);
+  static const Color redColorDC3545 = Color(0xFFDC3545);
+  static const Color settingSubtitleColor = Color(0xFF1E293B);
+  static const Color redColorE53935 = Color(0xFFE53935);
+  static const Color validationMsgColor = Colors.black;
+  static const Color greenColor = Color(0xFF81C784);
+  static const Color textFieldTextColor = Colors.black;
+  static const Color greenColor11BB8D = Color(0xFF11BB8D);
+  static const Color textFieldHintTextColor = Color(0xFFCCC9C9);
+  static const Color blueColorNew = Color(0xFF1F80FF);
+  static const Color blueColor0DCAF0 = Color(0xFF0DCAF0);
+  static const Color yellowColor = Color(0xFFFFF176);
+  static const Color yellowColorFFC107 = Color(0xFFFFC107);
+  static const Color orangeColor = Color(0xFFFFB74D);
+  static const Color greyColor = Color(0xFF9E9E9E);
+  static const Color darkGreyColor = Color(0xFF616161);
+  static const Color lightGreyColor = Color(0xFFf5f6f7);
+  static const Color courseColor = Color(0xFF64748B);
+  static const Color brownColor = Color(0xFF795548);
+  static const Color transparentColor = Color(0x00000000);
+  static const Color orderTagBackColor = Color(0xffE6F0EF);
+  static const Color textFieldFillColor = Color(0xFFF8FAFC);
+  static const Color roundingColor = Color(0xFF8799B1);
+  static const Color borderColor = Color(0xFFDEE5EE);
+  static const Color borderColorNew = Color(0xFFDFEDF8);
+  static const Color minuColorNew = Color(0xFFD8D8D8);
+  static const Color selectFloorColorNew = Color(0xFF9BA9BD);
+  static const Color seatsColorNew = Color(0xFF8C9DB4);
+  static const Color tableColor = Color(0xFFF8FAFC);
+  static const Color minusBorderColor = Color(0xFFE5F0F9);
+  static const Color backgroundColor = Color(0xFFFFF4E4);
+  static const Color dataColor = Color(0xFF7D7D7D);
+  static const Color paymentReferenceColor = Color(0xFF001D40);
+  static const Color categoryTextColor = Color(0xFF405268);
+  static const Color menuVariationProductNameColor = Color(0xFF2D2D2D);
+  static const Color infoColor = Color.fromARGB(255, 76, 201, 255);
+  static const double pixel10 = 0.01;
+  static const double pixel11 = 0.011;
+  static const double pixel12 = 0.012;
+  static const double pixel13 = 0.013;
+  static const double pixel14 = 0.012;
+  static const double pixel16 = 0.014;
+  static const double pixel18 = 0.016;
+  static const double pixel20 = 0.018;
+  static const double pixel22 = 0.020;
+  static const double pixel24 = 0.022;
+}
+
+Color getHexColor(String hexColor) {
+  hexColor = hexColor.toUpperCase().replaceAll("#", "");
+  if (hexColor.length == 6) {
+    hexColor = "FF$hexColor";
+  }
+  return Color(int.parse(hexColor, radix: 16));
+}
