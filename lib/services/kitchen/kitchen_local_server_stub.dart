@@ -11,7 +11,7 @@ class KitchenLocalServerService {
   bool get hasUsableLanIp => false;
   String get displayBaseUrl => 'http://<SET_LAN_IP>:$defaultPort';
 
-  Future<void> start({int port = defaultPort}) async {}
+  Future<void> start({int port = defaultPort, int maxAttempts = 8}) async {}
 
   Future<void> stop() async {}
 

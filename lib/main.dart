@@ -235,15 +235,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       textButtonTheme: TextButtonThemeData(
                         style: TextButton.styleFrom(
 
-                          foregroundColor: AppColors.primaryColor, // text color
+                          foregroundColor: GlobalColors.primaryColor, // text color
 
                         ),
                       ),
 
                       textSelectionTheme: TextSelectionThemeData(
-                        cursorColor: AppColors.primaryColor,        // 👈 cursor color
-                        selectionColor: AppColors.primaryColor,
-                        selectionHandleColor: AppColors.primaryColor,
+                        cursorColor: GlobalColors.primaryColor,        // 👈 cursor color
+                        selectionColor: GlobalColors.primaryColor,
+                        selectionHandleColor: GlobalColors.primaryColor,
                       ),
 
                       dropdownMenuTheme: DropdownMenuThemeData(
@@ -313,7 +313,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         fillColor: MaterialStateProperty.resolveWith(
                               (states) {
                             if (states.contains(MaterialState.selected)) {
-                              return AppColors.primaryColor;
+                              return GlobalColors.primaryColor;
                             }
                             return Colors.transparent;
                           },
@@ -324,7 +324,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           width: 1.5,
                         ),
                         overlayColor: MaterialStateProperty.all(
-                          AppColors.primaryColor.withOpacity(0.12),
+                          GlobalColors.primaryColor.withOpacity(0.12),
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4),
@@ -332,14 +332,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       ),
 
                       progressIndicatorTheme: const ProgressIndicatorThemeData(
-                        color: AppColors.primaryColor,      // sets the progress color
+                        color: GlobalColors.primaryColor,      // sets the progress color
                         linearTrackColor: Color(0xffECEAEA), // optional for LinearProgressIndicator
                         circularTrackColor: Color(0xffECEAEA), // optional track color for circular
                         strokeWidth: 4.0,                    // default thickness
                       ),
 
                       floatingActionButtonTheme: FloatingActionButtonThemeData(
-                        backgroundColor: AppColors.primaryColor,
+                        backgroundColor: GlobalColors.primaryColor,
                         foregroundColor: Colors.white, // icon/text color
                         elevation: 6.0,
                         shape: RoundedRectangleBorder(
@@ -381,11 +381,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
 bool isEnglish = true;
 void setupLocator() {
-  getIt.registerSingleton<LoginRepository>(LoginRepository());
-  getIt.registerSingleton<SelectBranchRepository>(SelectBranchRepository());
-  getIt.registerSingleton<KitchenLocalServerService>(
-    KitchenLocalServerService(),
-  );
+  if (!getIt.isRegistered<LoginRepository>()) {
+    getIt.registerSingleton<LoginRepository>(LoginRepository());
+  }
+  if (!getIt.isRegistered<SelectBranchRepository>()) {
+    getIt.registerSingleton<SelectBranchRepository>(SelectBranchRepository());
+  }
+  if (!getIt.isRegistered<KitchenLocalServerService>()) {
+    getIt.registerSingleton<KitchenLocalServerService>(
+      KitchenLocalServerService(),
+    );
+  }
 }
 int? transactionTotalPagesCount=1;
 int? productTotalPagesCount=1;

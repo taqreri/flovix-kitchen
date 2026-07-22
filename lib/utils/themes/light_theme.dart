@@ -43,7 +43,7 @@ ThemeData lightTheme = ThemeData.light().copyWith(
     fillColor: MaterialStateProperty.resolveWith(
           (states) {
         if (states.contains(MaterialState.selected)) {
-          return AppColors.primaryColor;
+          return GlobalColors.primaryColor;
         }
         return Colors.transparent;
       },
@@ -54,7 +54,7 @@ ThemeData lightTheme = ThemeData.light().copyWith(
       width: 1.5,
     ),
     overlayColor: MaterialStateProperty.all(
-      AppColors.primaryColor.withOpacity(0.12),
+      GlobalColors.primaryColor.withOpacity(0.12),
     ),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(4),

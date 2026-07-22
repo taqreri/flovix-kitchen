@@ -122,9 +122,9 @@ class _Header extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(
+                 Icon(
                   Icons.restaurant_menu,
-                  color: AppColors.primaryColor5BB0B0,
+                  color: GlobalColors.primaryColor5BB0B0,
                   size: 28,
                 ),
                 const SizedBox(width: 12),
@@ -228,7 +228,7 @@ class _OrderCard extends StatelessWidget {
       'preparing' => const Color(0xFFB45309),
       'ready' => const Color(0xFF047857),
       'served' => const Color(0xFF4B5563),
-      _ => AppColors.primaryColor,
+      _ => GlobalColors.primaryColor,
     };
   }
 

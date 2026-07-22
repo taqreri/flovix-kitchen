@@ -36,23 +36,74 @@ class KitchenLocalServerService {
   bool get hasUsableLanIp =>
       _lanIp != null && _lanIp!.isNotEmpty && !_isLoopback(_lanIp!);
 
-  Future<void> start({int port = defaultPort}) async {
-    if (_server != null) return;
-    _port = port;
+  Future<void> start({
+    int port = defaultPort,
+    int maxAttempts = 8,
+  }) async {
+    // Hot restart often leaves the previous socket bound; close first.
+    await stop();
     await refreshLanIp();
 
-    try {
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-      _sub = _server!.listen(_handleRequest);
-      debugPrint(
-        '[KitchenServer] listening on http://0.0.0.0:$port '
-        '(LAN: $displayBaseUrl, candidates: $_candidateIps)',
-      );
-    } catch (e, st) {
-      debugPrint('[KitchenServer] failed to start: $e');
-      debugPrint('$st');
-      rethrow;
+    Object? lastError;
+    StackTrace? lastStack;
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final tryPort = port + attempt;
+      try {
+        _server = await HttpServer.bind(
+          InternetAddress.anyIPv4,
+          tryPort,
+          shared: true,
+        );
+        _port = tryPort;
+        _sub = _server!.listen(_handleRequest);
+        if (tryPort != port) {
+          debugPrint(
+            '[KitchenServer] port $port busy — bound to $tryPort instead',
+          );
+        }
+        debugPrint(
+          '[KitchenServer] listening on http://0.0.0.0:$tryPort '
+          '(LAN: $displayBaseUrl, candidates: $_candidateIps)',
+        );
+        return;
+      } on SocketException catch (e, st) {
+        lastError = e;
+        lastStack = st;
+        if (!_isAddressInUse(e)) {
+          debugPrint('[KitchenServer] failed to start: $e');
+          debugPrint('$st');
+          rethrow;
+        }
+        debugPrint(
+          '[KitchenServer] port $tryPort in use, retrying '
+          '(${attempt + 1}/$maxAttempts)…',
+        );
+        // Brief pause helps after hot restart while the old socket releases.
+        await Future<void>.delayed(Duration(milliseconds: 120 * (attempt + 1)));
+      } catch (e, st) {
+        debugPrint('[KitchenServer] failed to start: $e');
+        debugPrint('$st');
+        rethrow;
+      }
     }
+
+    debugPrint('[KitchenServer] failed to start: $lastError');
+    if (lastStack != null) debugPrint('$lastStack');
+    Error.throwWithStackTrace(
+      lastError ??
+          StateError('Kitchen local server failed to bind near port $port'),
+      lastStack ?? StackTrace.current,
+    );
+  }
+
+  static bool _isAddressInUse(SocketException e) {
+    final code = e.osError?.errorCode;
+    // 98 = Linux/Android EADDRINUSE, 48 = macOS EADDRINUSE, 10048 = Windows.
+    return code == 98 ||
+        code == 48 ||
+        code == 10048 ||
+        (e.message.toLowerCase().contains('address already in use'));
   }
 
   Future<void> stop() async {

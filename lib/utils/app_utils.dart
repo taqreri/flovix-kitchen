@@ -87,7 +87,7 @@ class AppUtils {
 
   static BorderRadiusGeometry borderRadius(
       {required BuildContext context, double? radius}) {
-    return BorderRadius.circular(SizeConfig.width(context, radius ?? 0.015));
+    return BorderRadius.circular(SizeConfig.width(context, radius ?? 0.02));
   }
 
   static List<BoxShadow> boxShadow({required BuildContext context}) {
@@ -302,7 +302,7 @@ if(isShowProductPrice){
               Expanded(child: Text(msg)),
             ],
           ),
-          backgroundColor: AppColors.primaryColor,
+          backgroundColor: GlobalColors.primaryColor,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           duration: const Duration(seconds: 5),
@@ -345,7 +345,7 @@ if(isShowProductPrice){
       await _dismissFlushbarSafely();
 
       final flushbar = Flushbar(
-        backgroundColor: AppColors.primaryColor,
+        backgroundColor: GlobalColors.primaryColor,
         forwardAnimationCurve: Curves.decelerate,
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         padding: const EdgeInsets.all(15),

@@ -14,15 +14,15 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    //navigate();
+    navigate();
   }
 
   void navigate() {
-    Future.delayed(const Duration(milliseconds: 600), () {
+    Future.delayed(const Duration(seconds: 1), () {
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
-        RoutesName.kitchenDisplayScreen,
+        RoutesName.loginScreen,
         (route) => false,
       );
     });
