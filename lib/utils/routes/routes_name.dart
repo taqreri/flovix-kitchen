@@ -9,6 +9,7 @@ class RoutesName {
   static const String privacyPolicyScreen = 'privacy_policy_screen';
   static const String selectBranchScreen = 'select_branch_screen';
   static const String homeScreen = 'home_screen';
+  static const String kitchenDisplayScreen = 'kitchen_display_screen';
   static const String posMainScreen = 'pos_main_screen';
   static const String posGeneralSetting = 'pos_general_setting_screen';
 }

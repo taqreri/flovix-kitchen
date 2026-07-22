@@ -2,7 +2,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flovix_kitchen/screens/chucker_debug_service.dart';
-import 'package:flovix_kitchen/services/database/database_init_io.dart';
+import 'package:flovix_kitchen/services/database/database_init.dart';
+import 'package:flovix_kitchen/services/kitchen/kitchen_local_server.dart';
 import 'package:flovix_kitchen/utils/colors/colors.dart';
 import 'package:flovix_kitchen/utils/helper/helpers.dart';
 import 'package:flovix_kitchen/utils/platform/platform_info.dart';
@@ -61,6 +62,17 @@ Future<void> main() async {
   await ChuckerDebugService.initialize();
   ChuckerDebugService.applyRuntimeConfig();
   setupLocator();
+
+  if (!kIsWeb) {
+    try {
+      await getIt<KitchenLocalServerService>().start(
+        port: KitchenLocalServerService.defaultPort,
+      );
+    } catch (e, st) {
+      debugPrint('Kitchen local server failed to start: $e');
+      debugPrint('$st');
+    }
+  }
 
   // Get saved locale preference
   final prefs = await SharedPreferences.getInstance();
@@ -373,6 +385,9 @@ bool isEnglish = true;
 void setupLocator() {
   getIt.registerSingleton<LoginRepository>(LoginRepository());
   getIt.registerSingleton<SelectBranchRepository>(SelectBranchRepository());
+  getIt.registerSingleton<KitchenLocalServerService>(
+    KitchenLocalServerService(),
+  );
 }
 int? transactionTotalPagesCount=1;
 int? productTotalPagesCount=1;
