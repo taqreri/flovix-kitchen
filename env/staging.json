@@ -1,0 +1,13 @@
+{
+  "FLAVOR": "staging",
+  "APP_NAME": "Flovix Kitchen STG",
+  "WINDOWS_BINARY_NAME": "flovix_kitchen_stg",
+  "APP_PACKAGE_NAME": "com.flovix.kitchen.stg",
+  "API_BASE_URL": "https://posapi.flovix.net/api",
+  "WEB_BASE_URL": "https://app.flovix.net",
+  "ASSET_BASE_URL": "https://dev.taqreri.com",
+  "FIREBASE_ANDROID_API_KEY": "AIzaSyAI3avaY76o1EuCq5xlu3Tn5A7NR-SFDcI",
+  "FIREBASE_ANDROID_APP_ID": "1:828657372193:android:f450565febbe6762462760",
+  "FIREBASE_MESSAGING_SENDER_ID": "828657372193",
+  "FIREBASE_PROJECT_ID": "flovix-kitchen"
+}

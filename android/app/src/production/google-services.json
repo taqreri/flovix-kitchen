@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "828657372193",
+    "project_id": "flovix-kitchen",
+    "storage_bucket": "flovix-kitchen.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:828657372193:android:f450565febbe6762462760",
+        "android_client_info": {
+          "package_name": "com.flovix.kitchen"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAI3avaY76o1EuCq5xlu3Tn5A7NR-SFDcI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

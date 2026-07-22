@@ -210,8 +210,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               });
             }
 
-            return SafeArea(
-              child: ScreenUtilInit(
+            return ScreenUtilInit(
                 designSize: Size(
                   MediaQuery.of(context).size.width,
                   MediaQuery.of(context).size.height,
@@ -372,7 +371,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     onGenerateRoute: Routes.generateRoute,
                   );
                 },
-              ),
             );
           },
         ),

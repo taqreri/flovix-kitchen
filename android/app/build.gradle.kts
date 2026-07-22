@@ -18,14 +18,29 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.flovix.kitchen"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "env"
+    productFlavors {
+        create("production") {
+            dimension = "env"
+            applicationId = "com.flovix.kitchen"
+            resValue("string", "app_name", "Flovix Kitchen")
+            manifestPlaceholders["appIcon"] = "@drawable/ic_launcher_production"
+            manifestPlaceholders["appRoundIcon"] = "@drawable/ic_launcher_production"
+        }
+        create("staging") {
+            dimension = "env"
+            applicationId = "com.flovix.kitchen.stg"
+            resValue("string", "app_name", "Flovix Kitchen STG")
+            manifestPlaceholders["appIcon"] = "@drawable/ic_launcher_staging"
+            manifestPlaceholders["appRoundIcon"] = "@drawable/ic_launcher_staging"
+        }
     }
 
     buildTypes {
@@ -33,6 +48,24 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+// When product flavors are enabled, Gradle outputs app-<flavor>-debug.apk.
+// Flutter run/build without --flavor looks for app-debug.apk — alias production debug.
+android.applicationVariants.configureEach {
+    if (buildType.name == "debug" && flavorName == "production") {
+        assembleProvider.configure {
+            doLast {
+                val flutterApkDir =
+                    file("${rootProject.projectDir}/../build/app/outputs/flutter-apk")
+                val srcApk = flutterApkDir.resolve("app-production-debug.apk")
+                val destApk = flutterApkDir.resolve("app-debug.apk")
+                if (srcApk.exists()) {
+                    srcApk.copyTo(destApk, overwrite = true)
+                }
+            }
         }
     }
 }

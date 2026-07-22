@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flovix_kitchen/config/app_env.dart';
 import 'package:flovix_kitchen/utils/app_utils.dart';
 import 'package:flovix_kitchen/utils/platform/platform_info.dart';
 import 'package:flutter/cupertino.dart';
@@ -14,9 +15,11 @@ class NotificationServices {
       FlutterLocalNotificationsPlugin();
 
   Future<void> initLocalNotifications(RemoteMessage message) async {
-
+    final launcherIcon = AppEnv.flavor == 'staging'
+        ? '@drawable/ic_launcher_staging'
+        : '@drawable/ic_launcher_production';
     var androidInitializationSettings =
-        const AndroidInitializationSettings("@drawable/ic_launcher_staging");
+        AndroidInitializationSettings(launcherIcon);
     DarwinInitializationSettings iosInitializationSettings =
         const DarwinInitializationSettings(
       requestSoundPermission: true,

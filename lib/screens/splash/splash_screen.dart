@@ -1,3 +1,4 @@
+import 'package:flovix_kitchen/utils/images/app_images.dart';
 import 'package:flovix_kitchen/utils/routes/routes_name.dart';
 import 'package:flutter/material.dart';
 
@@ -12,6 +13,10 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    //navigate();
+  }
+
+  void navigate() {
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
@@ -24,23 +29,13 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return  Scaffold(
       backgroundColor: Color(0xFF0B1220),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.restaurant_menu, color: Color(0xFF5BB0B0), size: 48),
-            SizedBox(height: 16),
-            Text(
-              'Flovix Kitchen',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+      body: SizedBox.expand(
+        child: Image.asset(
+          AppImages.splashScreen,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
         ),
       ),
     );
