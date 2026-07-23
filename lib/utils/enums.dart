@@ -1,4 +1,4 @@
-enum PostApiStatus { initial, loading, success, error }
+enum LoginEnum { initial, loading, success, error }
 enum SessionStatusEnum { initial, loading, success, error }
 enum StartSessionStatus { initial, loading, success, error }
 enum CategoryEnum { initial, loading, success, error,unAuthorized }

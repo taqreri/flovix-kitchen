@@ -1,3 +1,4 @@
+import 'package:flovix_kitchen/services/splash/splash_services.dart' show SplashServices;
 import 'package:flovix_kitchen/utils/images/app_images.dart';
 import 'package:flovix_kitchen/utils/routes/routes_name.dart';
 import 'package:flovix_kitchen/utils/size_config.dart';
@@ -14,9 +15,10 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    navigate();
+    splashServices.checkIfUserLoggedIn(context);
+   // navigate();
   }
-
+  SplashServices splashServices = SplashServices();
   void navigate() {
     Future.delayed(const Duration(seconds: 1), () {
       if (!mounted) return;
