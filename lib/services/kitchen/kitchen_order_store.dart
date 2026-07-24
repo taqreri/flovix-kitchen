@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'kitchen_order_model.dart';
 
 /// In-memory kitchen ticket queue with a broadcast stream for the KDS UI.
@@ -21,6 +23,10 @@ class KitchenOrderStore {
 
   KitchenOrderTicket enqueue(Map<String, dynamic> payload) {
     final ticket = KitchenOrderTicket.fromPayload(payload);
+    debugPrint(
+      '[KitchenOrder] orderType=${ticket.orderType} '
+      'kind=${ticket.orderKind.name} label=${ticket.orderTypeLabel}',
+    );
     // Prefer newer ticket with same local/server id.
     _orders.removeWhere((o) {
       final a = o.raw['invoice'];
@@ -58,8 +64,22 @@ class KitchenOrderStore {
     _emit();
   }
 
+  void startOrder(String id) => markStatus(id, 'preparing');
+
+  void completeOrder(String id) => markStatus(id, 'ready');
+
+  void cancelOrder(String id) => markStatus(id, 'cancelled');
+
+  void holdOrder(String id) => markStatus(id, 'pending');
+
   void clearCompleted() {
-    _orders.removeWhere((o) => o.status == 'served' || o.status == 'done');
+    _orders.removeWhere(
+      (o) =>
+          o.status == 'served' ||
+          o.status == 'done' ||
+          o.status == 'ready' ||
+          o.status == 'cancelled',
+    );
     _emit();
   }
 

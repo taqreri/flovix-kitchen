@@ -1,28 +1,27 @@
 import 'package:flovix_kitchen/utils/colors/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'themes.dart';
 
 ThemeData lightTheme = ThemeData.light().copyWith(
   appBarTheme: const AppBarTheme(
     systemOverlayStyle:
-    SystemUiOverlayStyle(statusBarBrightness: Brightness.light),
+        SystemUiOverlayStyle(statusBarBrightness: Brightness.light),
     iconTheme: IconThemeData(
       color: Colors.black,
     ),
   ),
   colorScheme: ThemeData.light().colorScheme.copyWith(
-    secondary: const Color(0xffa1a1a1),
-    primary: const Color(0xff0F0425),
-    onPrimary: const Color(0xff9694B8),
-    outline: const Color(0xfff0f0f0),
-    onSurface: const Color(0xfff6f8f8),
-    surface: const Color(0xffDCE8E8),
-    primaryContainer: Colors.white,
-    onPrimaryContainer: const Color(0xffd8d8da),
-  ),
+        secondary: const Color(0xffa1a1a1),
+        primary: const Color(0xff0F0425),
+        onPrimary: const Color(0xff9694B8),
+        outline: const Color(0xfff0f0f0),
+        onSurface: const Color(0xfff6f8f8),
+        surface: const Color(0xffDCE8E8),
+        primaryContainer: Colors.white,
+        onPrimaryContainer: const Color(0xffd8d8da),
+      ),
   textSelectionTheme: const TextSelectionThemeData(
     cursorColor: Colors.black,
   ),
@@ -34,14 +33,12 @@ ThemeData lightTheme = ThemeData.light().copyWith(
   primaryColor: ThemeConfig.primaryColor,
   radioTheme: RadioThemeData(
     fillColor: WidgetStateProperty.resolveWith(
-          (states) => Colors.black.withOpacity(.4),
+      (states) => Colors.black.withOpacity(.4),
     ),
   ),
-
-  // ✅ ADDED: Checkbox theme (selected color = AppColors.primary)
   checkboxTheme: CheckboxThemeData(
     fillColor: MaterialStateProperty.resolveWith(
-          (states) {
+      (states) {
         if (states.contains(MaterialState.selected)) {
           return GlobalColors.primaryColor;
         }
@@ -60,27 +57,38 @@ ThemeData lightTheme = ThemeData.light().copyWith(
       borderRadius: BorderRadius.circular(4),
     ),
   ),
-  textTheme: ThemeData.light().textTheme.copyWith(
-    titleMedium: GoogleFonts.roboto(color: Colors.black),
-    titleSmall: GoogleFonts.roboto(
-      color: Colors.black.withOpacity(.5),
-    ),
-    displayLarge: GoogleFonts.roboto(
-      color: Colors.black,
-    ),
-    displayMedium: GoogleFonts.roboto(
-      color: Colors.black,
-      fontWeight: FontWeight.w400,
-    ),
-    headlineMedium: GoogleFonts.roboto(
-      color: ThemeConfig.textColor6B698E,
-    ),
-    displaySmall: GoogleFonts.roboto(
-      color: Colors.black,
-      fontWeight: FontWeight.w400,
-    ),
-    bodyMedium: GoogleFonts.roboto(
-      color: ThemeConfig.textColorBCBFC2,
-    ),
-  ),
+  textTheme: ThemeData.light().textTheme.apply(
+        fontFamily: ThemeConfig.inter,
+      ).copyWith(
+        titleMedium: const TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: Colors.black,
+        ),
+        titleSmall: TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: Colors.black.withOpacity(.5),
+        ),
+        displayLarge: const TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: Colors.black,
+        ),
+        displayMedium: const TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: Colors.black,
+          fontWeight: FontWeight.w400,
+        ),
+        headlineMedium: const TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: ThemeConfig.textColor6B698E,
+        ),
+        displaySmall: const TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: Colors.black,
+          fontWeight: FontWeight.w400,
+        ),
+        bodyMedium: const TextStyle(
+          fontFamily: ThemeConfig.inter,
+          color: ThemeConfig.textColorBCBFC2,
+        ),
+      ),
 );

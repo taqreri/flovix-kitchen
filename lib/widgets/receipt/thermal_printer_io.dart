@@ -20,7 +20,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:flovix_kitchen/widgets/receipt/windows_raw_printer_io.dart';
+import 'package:flovix_kitchen/widgets/receipt/windows_raw_printer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';

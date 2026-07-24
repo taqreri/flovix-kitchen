@@ -72,7 +72,15 @@ class Helpers {
       return PlatformInfo.isDesktop;
     }
   }
+  static bool isTablet() {
+    final width = ScreenUtil().screenWidth;
+    final height = ScreenUtil().screenHeight;
 
+    final shortestSide = width < height ? width : height;
+
+    // Industry standard tablet breakpoint
+    return shortestSide >= 600;
+  }
 static bool isPosDevice(){
     if(ScreenUtil().screenHeight<450){
       return true;
@@ -93,13 +101,5 @@ static bool isPosDevice(){
       return 0.95;
     }
 
-  } static bool isTablet() {
-    final width = ScreenUtil().screenWidth;
-    final height = ScreenUtil().screenHeight;
-
-    final shortestSide = width < height ? width : height;
-
-    // Industry standard tablet breakpoint
-    return shortestSide >= 600;
   }
 }

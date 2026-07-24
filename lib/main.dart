@@ -8,7 +8,7 @@ import 'package:flovix_kitchen/utils/colors/colors.dart';
 import 'package:flovix_kitchen/utils/helper/helpers.dart';
 import 'package:flovix_kitchen/utils/platform/platform_info.dart';
 import 'package:flovix_kitchen/widgets/debug/windows_api_debug_overlay.dart';
-import 'package:flovix_kitchen/widgets/receipt/thermal_printer_io.dart';
+import 'package:flovix_kitchen/widgets/receipt/thermal_printer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +29,7 @@ import 'notification_services/notification_service.dart';
 
 import 'utils/routes/routes.dart';
 import 'utils/routes/routes_name.dart';
+import 'utils/themes/theme_config.dart';
 import 'utils/app_utils.dart' show rootScaffoldMessengerKey;
 
 final repaintBoundaryKey = GlobalKey();
@@ -231,6 +232,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         ChuckerFlutter.navigatorObserver,
                     ],
                     theme: ThemeData(
+                      fontFamily: ThemeConfig.inter,
+                      textTheme: ThemeData.light().textTheme.apply(
+                            fontFamily: ThemeConfig.inter,
+                          ),
+                      primaryTextTheme: ThemeData.light().primaryTextTheme.apply(
+                            fontFamily: ThemeConfig.inter,
+                          ),
 
                       textButtonTheme: TextButtonThemeData(
                         style: TextButton.styleFrom(
@@ -247,7 +255,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       ),
 
                       dropdownMenuTheme: DropdownMenuThemeData(
-                        textStyle:  TextStyle(
+                        textStyle: TextStyle(
+                          fontFamily: ThemeConfig.inter,
                           fontSize:10,
                           fontWeight: FontWeight.w500,
                           color: Colors.black,
@@ -270,20 +279,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                           /// 🔹 Hint text
                           hintStyle: const TextStyle(
+                            fontFamily: ThemeConfig.inter,
                             fontSize:10,
                             fontWeight: FontWeight.w400,
                             color: Colors.grey,
                           ),
 
                           /// 🔹 Selected value text
-                          labelStyle:  TextStyle(
+                          labelStyle: TextStyle(
+                            fontFamily: ThemeConfig.inter,
                             fontSize:Helpers.isTablet()? null:12.sp,
                             fontWeight: FontWeight.w500,
                             color: Colors.black,
                           ),
 
                           /// 🔹 Floating label (if used)
-                          floatingLabelStyle:  TextStyle(
+                          floatingLabelStyle: TextStyle(
+                            fontFamily: ThemeConfig.inter,
                             fontSize: Helpers.isTablet()? null:12.sp,
                             fontWeight: FontWeight.w500,
                             color: Colors.blue,
@@ -303,6 +315,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           ),
 
                           errorStyle: const TextStyle(
+                            fontFamily: ThemeConfig.inter,
                             fontSize: 12,
                             color: Colors.red,
                           ),
@@ -350,7 +363,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           minHeight: 50,
                         ),
                       ),
-                      fontFamily: 'Inter',
                     ),
                     //  theme: lightTheme,
                     //  darkTheme: darkTheme,

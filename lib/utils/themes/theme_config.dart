@@ -30,6 +30,7 @@ class ThemeConfig {
   static const textColor37C9EE = Color(0xff37C9EE);
 
   /// fonts family
+  static const inter = 'Inter';
   static const pangramRegular = 'Pangram Regular';
   static const pangramMedium = 'Pangram Medium';
   static const pangramBold = 'Pangram Bold';
