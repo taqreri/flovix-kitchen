@@ -30,14 +30,14 @@ android {
         create("production") {
             dimension = "env"
             applicationId = "com.flovix.kitchen"
-            resValue("string", "app_name", "Flovix Kitchen")
+            resValue("string", "app_name", "Flovix KDS")
             manifestPlaceholders["appIcon"] = "@drawable/ic_launcher_production"
             manifestPlaceholders["appRoundIcon"] = "@drawable/ic_launcher_production"
         }
         create("staging") {
             dimension = "env"
             applicationId = "com.flovix.kitchen.stg"
-            resValue("string", "app_name", "Flovix Kitchen STG")
+            resValue("string", "app_name", "Flovix KDS STG")
             manifestPlaceholders["appIcon"] = "@drawable/ic_launcher_staging"
             manifestPlaceholders["appRoundIcon"] = "@drawable/ic_launcher_staging"
         }
