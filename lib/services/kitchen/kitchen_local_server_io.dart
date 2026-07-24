@@ -225,7 +225,7 @@ class KitchenLocalServerService {
           return;
         }
         final payload = Map<String, dynamic>.from(decoded);
-        final ticket = KitchenOrderStore.instance.enqueue(payload);
+        final ticket = await KitchenOrderStore.instance.enqueue(payload);
         await _writeJson(request.response, {
           'ok': true,
           'id': ticket.id,

@@ -10,6 +10,7 @@ import 'package:flovix_kitchen/utils/helper/divider.dart';
 import 'package:flovix_kitchen/utils/helper/helpers.dart';
 import 'package:flovix_kitchen/utils/images/app_images.dart';
 import 'package:flovix_kitchen/utils/size_config.dart';
+import 'package:flovix_kitchen/widgets/kitchen_order_notes_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
@@ -1226,7 +1227,7 @@ class _OrderCardState extends State<_OrderCard> {
     final status = KdsStatus.fromTicket(widget.ticket);
     final inv = widget.ticket.invoiceNumber?.trim();
     final orderTitle = inv == null || inv.isEmpty ? '#' : '#$inv';
-    final visibleItems = widget.ticket.items.take(3).toList();
+    final visibleItems = widget.ticket.items.take(4).toList();
     final moreCount = widget.ticket.items.length - visibleItems.length;
 
     return Container(
@@ -1406,8 +1407,9 @@ class _OrderCardState extends State<_OrderCard> {
               ),
             ],
           ),
-
-          buildVerticalDivider(context: context, fraction: 0.012),
+          buildVerticalDivider(context: context, fraction: 0.01),
+          Divider(color: GlobalColors.dividerColor,height: 0.02,thickness: 0.8,),
+          buildVerticalDivider(context: context, fraction: 0.01),
           Expanded(
             child: Column(
               children: [
@@ -1432,15 +1434,15 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                 if (moreCount > 0)
                   Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: Alignment.center,
                     child: Padding(
                       padding: EdgeInsets.only(
-                        top: SizeConfig.height(context, 0.004),
+                        top: SizeConfig.height(context, 0.00),
                       ),
                       child: Text(
                         '+$moreCount more',
                         style: TextStyle(
-                          color: GlobalColors.kdsMuted,
+                          color: GlobalColors.black60Color,
                           fontWeight: FontWeight.w600,
                           fontSize: SizeConfig.width(
                             context,
@@ -1453,6 +1455,10 @@ class _OrderCardState extends State<_OrderCard> {
               ],
             ),
           ),
+          Divider(color: GlobalColors.dividerColor,height: 0.02,thickness: 0.8,),
+          buildVerticalDivider(context: context,fraction: 0.01),
+          if(status != KdsStatus.completed &&
+              status != KdsStatus.cancelled)
           _NotesBar(onTap: () => showOrderNotesDialog(context, widget.ticket)),
           buildVerticalDivider(context: context, fraction: 0.012),
           _CardActions(ticket: widget.ticket, status: status),
@@ -1625,187 +1631,6 @@ class _NotesBar extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-Future<void> showOrderNotesDialog(
-  BuildContext context,
-  KitchenOrderTicket ticket,
-)
-{
-  final itemNotes = ticket.items.where((item) {
-    final hasNote = (item.notes ?? '').trim().isNotEmpty;
-    final hasMods = item.modifiers.isNotEmpty;
-    return hasNote || hasMods;
-  }).toList();
-  final invoiceNote = (ticket.notes ?? '').trim();
-
-  return showDialog<void>(
-    context: context,
-    barrierColor: Colors.black.withValues(alpha: 0.4),
-    builder: (ctx) {
-      return Dialog(
-        backgroundColor: GlobalColors.whiteColor,
-        insetPadding: EdgeInsets.symmetric(
-          horizontal: SizeConfig.width(context, 0.22),
-          vertical: SizeConfig.height(context, 0.08),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.width(context, 0.012)),
-        ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: SizeConfig.width(context, 0.42).clamp(360.0, 520.0),
-            maxHeight: SizeConfig.height(context, 0.7),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(SizeConfig.width(context, 0.016)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Notes',
-                        style: TextStyle(
-                          color: GlobalColors.textColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: SizeConfig.width(
-                            context,
-                            GlobalColors.pixel18,
-                          ),
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => Navigator.of(ctx).pop(),
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: EdgeInsets.all(
-                          SizeConfig.width(context, 0.004),
-                        ),
-                        child: Icon(
-                          Icons.close_rounded,
-                          color: GlobalColors.bodyColor,
-                          size: SizeConfig.width(context, 0.02),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                buildVerticalDivider(context: context, fraction: 0.016),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (itemNotes.isEmpty && invoiceNote.isEmpty)
-                          Text(
-                            'No notes for this order.',
-                            style: TextStyle(
-                              color: GlobalColors.bodyColor,
-                              fontSize: SizeConfig.width(
-                                context,
-                                GlobalColors.pixel13,
-                              ),
-                            ),
-                          ),
-                        for (final item in itemNotes) ...[
-                          Text(
-                            _qtyLabel(item),
-                            style: TextStyle(
-                              color: GlobalColors.textColor,
-                              fontWeight: FontWeight.w700,
-                              fontSize: SizeConfig.width(
-                                context,
-                                GlobalColors.pixel13,
-                              ),
-                            ),
-                          ),
-                          buildVerticalDivider(
-                            context: context,
-                            fraction: 0.008,
-                          ),
-                          _NoteBox(
-                            text: [
-                              if ((item.notes ?? '').trim().isNotEmpty)
-                                item.notes!.trim(),
-                              ...item.modifiers.map((m) {
-                                if (m.startsWith('+') || m.startsWith('-')) {
-                                  return m;
-                                }
-                                return '- $m';
-                              }),
-                            ].join('\n'),
-                          ),
-                          buildVerticalDivider(
-                            context: context,
-                            fraction: 0.016,
-                          ),
-                        ],
-                        Text(
-                          'Invoice Note',
-                          style: TextStyle(
-                            color: GlobalColors.textColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: SizeConfig.width(
-                              context,
-                              GlobalColors.pixel13,
-                            ),
-                          ),
-                        ),
-                        buildVerticalDivider(context: context, fraction: 0.008),
-                        _NoteBox(
-                          text: invoiceNote.isEmpty
-                              ? 'No invoice note.'
-                              : invoiceNote,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-String _qtyLabel(KitchenOrderItem item) {
-  final qty = item.qty % 1 == 0
-      ? item.qty.toInt().toString()
-      : item.qty.toString();
-  return '${qty}x ${item.name}';
-}
-
-class _NoteBox extends StatelessWidget {
-  const _NoteBox({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(SizeConfig.width(context, 0.012)),
-      decoration: BoxDecoration(
-        color: GlobalColors.kdsNotesBg,
-        borderRadius: BorderRadius.circular(SizeConfig.width(context, 0.008)),
-        border: Border.all(color: GlobalColors.fieldBorder),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: GlobalColors.bodyColor,
-          height: 1.45,
-          fontSize: SizeConfig.width(context, GlobalColors.pixel12),
         ),
       ),
     );

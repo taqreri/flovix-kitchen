@@ -29,6 +29,7 @@ class GlobalColors {
   static const Color kdsPageBg = Color(0xFFF1F5F9);
   static const Color kdsNew = Colors.white;
   static const Color kdsNewBg = Color(0xFF2563EB);
+  static const Color dividerColor = Color(0xFFE5E5E5);
   static const Color kdsProcessing = Color(0xFFF59E0B);
   static const Color kdsProcessingBg = Color(0xFFF59E0B);
   static const Color kdsCompleted = Color(0xFF16A34A);

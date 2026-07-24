@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flovix_kitchen/screens/chucker_debug_service.dart';
 import 'package:flovix_kitchen/services/database/database_init.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_local_server.dart';
+import 'package:flovix_kitchen/services/kitchen/kitchen_order_store.dart';
 import 'package:flovix_kitchen/utils/colors/colors.dart';
 import 'package:flovix_kitchen/utils/helper/helpers.dart';
 import 'package:flovix_kitchen/utils/platform/platform_info.dart';
@@ -45,6 +46,7 @@ Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
   await initializeAppDatabase();
+  await KitchenOrderStore.instance.loadFromDisk();
   // Reduce decoded image memory pressure (important on iOS / low-RAM iPads).
   // Debug/profile from Xcode already uses extra RAM; keep caches smaller.
   if (PlatformInfo.isMobile) {

@@ -353,6 +353,35 @@ class KitchenOrderTicket {
         'raw': raw,
       };
 
+  /// Restore a ticket previously persisted via [toJson].
+  factory KitchenOrderTicket.fromJson(Map<String, dynamic> json) {
+    final itemsRaw = json['items'];
+    final raw = json['raw'] is Map
+        ? Map<String, dynamic>.from(json['raw'] as Map)
+        : <String, dynamic>{};
+    final receivedRaw = json['receivedAt']?.toString();
+    return KitchenOrderTicket(
+      id: '${json['id'] ?? ''}',
+      receivedAt: DateTime.tryParse(receivedRaw ?? '') ?? DateTime.now(),
+      raw: raw,
+      invoiceNumber: json['invoiceNumber']?.toString(),
+      table: json['table']?.toString(),
+      customerName: json['customerName']?.toString(),
+      orderType: json['orderType']?.toString(),
+      notes: json['notes']?.toString(),
+      items: itemsRaw is List
+          ? itemsRaw
+              .whereType<Map>()
+              .map(
+                (e) => KitchenOrderItem.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList()
+          : const [],
+      total: _toDouble(json['total']),
+      status: json['status']?.toString() ?? 'pending',
+    );
+  }
+
   static double? _toDouble(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
