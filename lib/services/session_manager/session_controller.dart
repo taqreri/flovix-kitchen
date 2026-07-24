@@ -194,7 +194,9 @@ class SessionController {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('counter_discount_value');
       await prefs.remove('counter_discount_isPercentage');
-      await prefs.remove('isEnglish');
+      await prefs.remove('user_token');
+      await prefs.remove('branch_Information');
+      await prefs.remove('customer_tag');
 
       // Reset static variables
       isLogin = false;

@@ -2,11 +2,18 @@ import 'dart:async';
 import 'dart:math';
 import 'package:another_flushbar/flushbar.dart';
 import 'package:another_flushbar/flushbar_route.dart';
+import 'package:flovix_kitchen/bloc/dashboard/dashboard_bloc.dart';
+import 'package:flovix_kitchen/bloc/dashboard/dashboard_event.dart';
+import 'package:flovix_kitchen/services/database/pos_offline_database.dart';
+import 'package:flovix_kitchen/services/kitchen/kitchen_local_server.dart';
+import 'package:flovix_kitchen/services/kitchen/kitchen_order_store.dart';
 import 'package:flovix_kitchen/services/session_manager/session_controller.dart';
+import 'package:flovix_kitchen/utils/enums.dart';
 import 'package:flovix_kitchen/utils/routes/routes_name.dart';
 import 'package:flovix_kitchen/utils/safe_navigator.dart';
 import 'package:flovix_kitchen/utils/size_config.dart';
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -376,13 +383,109 @@ if(isShowProductPrice){
     BuildContext context, {
     String message = 'Your session has been expired',
   }) async {
-    await SessionController().clearUserData();
+    await logoutAndClearAll(context, showMessage: message);
+  }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+  /// Confirms logout, then fires [LogoutEvent] on [DashboardBloc].
+  static Future<void> showLogoutDialog(
+    BuildContext context, {
+    required DashboardBloc dashboardBloc,
+  }) async {
+    if (dashboardBloc.state.logoutEnum == LogoutEnum.loading) return;
 
-  //  await PosOfflineDatabase.instance.deleteAllLocalTransactions();
-   // await PosOfflineDatabase.instance.clearAll();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: GlobalColors.whiteColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              SizeConfig.width(dialogContext, 0.02),
+            ),
+          ),
+          title: Text(
+            'Logout',
+            style: TextStyle(
+              color: GlobalColors.textColor,
+              fontWeight: FontWeight.w700,
+              fontSize: SizeConfig.width(dialogContext, GlobalColors.pixel18),
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to logout? All local kitchen data will be cleared.',
+            style: TextStyle(
+              color: GlobalColors.bodyColor,
+              fontSize: SizeConfig.width(dialogContext, GlobalColors.pixel14),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: GlobalColors.searchIcon),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                'Logout',
+                style: TextStyle(
+                  color: GlobalColors.kdsCancelled,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && context.mounted) {
+      dashboardBloc.add(const LogoutEvent());
+    }
+  }
+
+  /// Clears session, prefs, kitchen orders, offline DB, then opens login.
+  static Future<void> logoutAndClearAll(
+    BuildContext context, {
+    String? showMessage,
+  }) async {
+    try {
+      await SessionController().clearUserData();
+    } catch (e) {
+      debugPrint('clearUserData failed: $e');
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    } catch (e) {
+      debugPrint('prefs.clear failed: $e');
+    }
+
+    try {
+      await KitchenOrderStore.instance.clearAll();
+    } catch (e) {
+      debugPrint('KitchenOrderStore.clearAll failed: $e');
+    }
+
+    try {
+      await PosOfflineDatabase.instance.clearAll();
+      await PosOfflineDatabase.instance.deleteAllLocalTransactions();
+    } catch (e) {
+      debugPrint('PosOfflineDatabase clear failed: $e');
+    }
+
+    try {
+      final getIt = GetIt.instance;
+      if (getIt.isRegistered<KitchenLocalServerService>()) {
+        await getIt<KitchenLocalServerService>().stop();
+      }
+    } catch (e) {
+      debugPrint('KitchenLocalServer stop failed: $e');
+    }
 
     if (!context.mounted) return;
 
@@ -392,8 +495,10 @@ if(isShowProductPrice){
       (route) => false,
     );
 
-    if (message.trim().isNotEmpty && context.mounted) {
-      AppUtils.showFlushBar(message, context);
+    if (showMessage != null &&
+        showMessage.trim().isNotEmpty &&
+        context.mounted) {
+      AppUtils.showFlushBar(showMessage, context);
     }
   }
 }

@@ -23,6 +23,7 @@ import 'package:chucker_flutter/chucker_flutter.dart';
 
 
 import 'bloc/locale_cubit.dart';
+import 'bloc/repository/dashboard_repository.dart';
 import 'bloc/repository/login_repository.dart';
 import 'bloc/repository/select_branch_repository.dart';
 import 'config/app_env.dart';
@@ -400,6 +401,9 @@ void setupLocator() {
   }
   if (!getIt.isRegistered<SelectBranchRepository>()) {
     getIt.registerSingleton<SelectBranchRepository>(SelectBranchRepository());
+  }
+  if (!getIt.isRegistered<DashboardRepository>()) {
+    getIt.registerSingleton<DashboardRepository>(DashboardRepository());
   }
   if (!getIt.isRegistered<KitchenLocalServerService>()) {
     getIt.registerSingleton<KitchenLocalServerService>(

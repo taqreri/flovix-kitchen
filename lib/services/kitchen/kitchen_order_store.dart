@@ -104,6 +104,13 @@ class KitchenOrderStore {
     _emit();
   }
 
+  /// Clear all in-memory and persisted kitchen tickets (logout).
+  Future<void> clearAll() async {
+    await KitchenOrderDatabase.instance.clearAll();
+    _orders.clear();
+    _emit();
+  }
+
   bool _isSameInvoice(KitchenOrderTicket a, KitchenOrderTicket b) {
     final aInv = a.raw['invoice'];
     final bInv = b.raw['invoice'];

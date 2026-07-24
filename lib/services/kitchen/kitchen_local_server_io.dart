@@ -134,24 +134,50 @@ class KitchenLocalServerService {
   }
 
   Future<void> refreshLanIp() async {
-    final ips = await _discoverLanIps();
+    final discovery = await _discoverLanIpsDetailed();
+    final owned = discovery.ownedIps;
+    var ips = discovery.rankedIps;
+
+    // Only advertise IPs that this device actually owns on a NIC.
+    if (owned.isNotEmpty) {
+      final ownedOnly = ips.where(owned.contains).toList();
+      if (ownedOnly.isNotEmpty) {
+        ips = ownedOnly;
+      }
+    }
+
+    // Never prefer a known Wi‑Fi gateway (e.g. 192.168.100.1).
+    final gateway = discovery.gatewayIp;
+    final withoutGateway = ips
+        .where(
+          (ip) =>
+              ip != gateway &&
+              !_isLikelyGatewayIp(ip),
+        )
+        .toList();
+    if (withoutGateway.isNotEmpty) {
+      ips = withoutGateway;
+    }
+
     _candidateIps = ips;
     if (ips.isNotEmpty) {
       _lanIp = ips.first;
       await _cacheLanIp(ips.first);
     } else {
-      // Wi‑Fi off at boot — reuse last known LAN IP so UI isn't blank.
       final cached = await _readCachedLanIp();
-      if (cached != null) {
+      if (cached != null &&
+          cached != gateway &&
+          !_isLikelyGatewayIp(cached) &&
+          (owned.isEmpty || owned.contains(cached))) {
         _lanIp = cached;
         _candidateIps = [cached];
         debugPrint('[KitchenServer] using cached LAN IP $cached');
       } else {
-        // Last resort: local loopback so chip shows a real address.
         _lanIp = '127.0.0.1';
         _candidateIps = const ['127.0.0.1'];
         debugPrint(
-          '[KitchenServer] no network interface — falling back to 127.0.0.1',
+          '[KitchenServer] no usable LAN IP — falling back to 127.0.0.1 '
+          '(gateway=$gateway owned=$owned ranked=${discovery.rankedIps})',
         );
       }
     }
@@ -163,7 +189,7 @@ class KitchenLocalServerService {
   }
 
   static Future<void> _cacheLanIp(String ip) async {
-    if (_isLoopback(ip) || _isLinkLocal(ip)) return;
+    if (_isLoopback(ip) || _isLinkLocal(ip) || _isLikelyGatewayIp(ip)) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsLanIpKey, ip);
@@ -174,7 +200,11 @@ class KitchenLocalServerService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final ip = prefs.getString(_prefsLanIpKey);
-      if (ip == null || ip.isEmpty || _isLoopback(ip) || _isLinkLocal(ip)) {
+      if (ip == null ||
+          ip.isEmpty ||
+          _isLoopback(ip) ||
+          _isLinkLocal(ip) ||
+          _isLikelyGatewayIp(ip)) {
         return null;
       }
       return ip;
@@ -183,19 +213,30 @@ class KitchenLocalServerService {
     }
   }
 
-  static Future<List<String>> _discoverLanIps() async {
+  static Future<_LanDiscoveryResult> _discoverLanIpsDetailed() async {
     final candidates = <_LanIpCandidate>[];
+    final ownedIps = <String>{};
+    String? gatewayIp;
 
     void addCandidate({
       required String ip,
       required String interfaceName,
       required _LanInterfaceKind kind,
+      bool markOwned = false,
     }) {
       final trimmed = ip.trim();
       if (trimmed.isEmpty || _isLoopback(trimmed) || _isLinkLocal(trimmed)) {
         return;
       }
       if (trimmed.contains(':')) return;
+      if (markOwned) ownedIps.add(trimmed);
+      // Never treat the Wi‑Fi gateway itself as this device's address.
+      if (gatewayIp != null && trimmed == gatewayIp) {
+        debugPrint(
+          '[KitchenServer] skipped gateway IP $trimmed from $interfaceName',
+        );
+        return;
+      }
       if (candidates.any((c) => c.ip == trimmed)) return;
       candidates.add(
         _LanIpCandidate(
@@ -204,6 +245,21 @@ class KitchenLocalServerService {
           kind: kind,
         ),
       );
+    }
+
+    // Resolve gateway early so we can reject it as a "local" candidate.
+    await _ensureNetworkInfoPermission();
+    try {
+      gatewayIp = await NetworkInfo().getWifiGatewayIP();
+      if (gatewayIp != null &&
+          (gatewayIp.isEmpty ||
+              _isLoopback(gatewayIp) ||
+              _isLinkLocal(gatewayIp))) {
+        gatewayIp = null;
+      }
+      debugPrint('[KitchenServer] getWifiGatewayIP=$gatewayIp');
+    } catch (e) {
+      debugPrint('[KitchenServer] getWifiGatewayIP failed: $e');
     }
 
     // 0) Android native — works with Wi‑Fi OFF + Ethernet/USB/hotspot ON.
@@ -219,10 +275,11 @@ class KitchenLocalServerService {
           'cellular' => _LanInterfaceKind.other,
           _ => _LanInterfaceKind.lan,
         },
+        markOwned: true,
       );
     }
 
-    // 1) Dart OS interface list.
+    // 1) Dart OS interface list (source of truth for "owned" IPs).
     try {
       final interfaces = await NetworkInterface.list(
         includeLinkLocal: true,
@@ -242,6 +299,7 @@ class KitchenLocalServerService {
             ip: addr.address,
             interfaceName: name,
             kind: _classifyInterface(name),
+            markOwned: true,
           );
         }
       }
@@ -250,7 +308,6 @@ class KitchenLocalServerService {
     }
 
     // 2) Wi‑Fi plugin (null when Wi‑Fi is off — expected).
-    await _ensureNetworkInfoPermission();
     try {
       final info = NetworkInfo();
       final wifiIp = await info.getWifiIP();
@@ -260,18 +317,22 @@ class KitchenLocalServerService {
           ip: wifiIp,
           interfaceName: 'wifi',
           kind: _LanInterfaceKind.wifi,
+          // Only trust wifi plugin if NIC list already owns it (or NIC empty).
+          markOwned: ownedIps.isEmpty || ownedIps.contains(wifiIp.trim()),
         );
       }
 
-      final gateway = await info.getWifiGatewayIP();
-      debugPrint('[KitchenServer] getWifiGatewayIP=$gateway');
-      if (gateway != null && gateway.isNotEmpty && !_isLoopback(gateway)) {
-        final viaGateway = await _probeLocalIpViaHost(gateway);
+      if (gatewayIp != null) {
+        final viaGateway = await _probeLocalIpViaHost(
+          gatewayIp,
+          rejectIfEqualsHost: true,
+        );
         if (viaGateway != null) {
           addCandidate(
             ip: viaGateway,
             interfaceName: 'gateway-route',
             kind: _LanInterfaceKind.lan,
+            markOwned: ownedIps.isEmpty || ownedIps.contains(viaGateway),
           );
         }
       }
@@ -280,12 +341,17 @@ class KitchenLocalServerService {
     }
 
     // 3) Route probe.
-    final probed = await _probeOutboundLocalIp();
+    final probed = await _probeOutboundLocalIp(
+      rejectHosts: {
+        if (gatewayIp != null) gatewayIp,
+      },
+    );
     if (probed != null) {
       addCandidate(
         ip: probed,
         interfaceName: 'route',
         kind: _LanInterfaceKind.lan,
+        markOwned: ownedIps.isEmpty || ownedIps.contains(probed),
       );
     }
 
@@ -295,6 +361,7 @@ class KitchenLocalServerService {
         ip: ip,
         interfaceName: 'cli',
         kind: _LanInterfaceKind.lan,
+        markOwned: ownedIps.isEmpty || ownedIps.contains(ip),
       );
     }
 
@@ -311,9 +378,15 @@ class KitchenLocalServerService {
 
     debugPrint(
       '[KitchenServer] LAN candidates: '
-      '${candidates.map((c) => '${c.ip}(${c.interfaceName}/${c.kind.name})').join(', ')}',
+      '${candidates.map((c) => '${c.ip}(${c.interfaceName}/${c.kind.name})').join(', ')} '
+      'owned=$ownedIps gateway=$gatewayIp',
     );
-    return deduped;
+
+    return _LanDiscoveryResult(
+      rankedIps: deduped,
+      ownedIps: ownedIps,
+      gatewayIp: gatewayIp,
+    );
   }
 
   static Future<List<Map<String, String>>> _androidNativeIps() async {
@@ -357,7 +430,9 @@ class KitchenLocalServerService {
     }
   }
 
-  static Future<String?> _probeOutboundLocalIp() async {
+  static Future<String?> _probeOutboundLocalIp({
+    Set<String> rejectHosts = const {},
+  }) async {
     const probes = <(String, int)>[
       ('192.168.1.1', 80),
       ('192.168.0.1', 80),
@@ -368,8 +443,13 @@ class KitchenLocalServerService {
     ];
 
     for (final probe in probes) {
-      final ip = await _probeLocalIpViaHost(probe.$1, port: probe.$2);
-      if (ip != null) return ip;
+      if (rejectHosts.contains(probe.$1)) continue;
+      final ip = await _probeLocalIpViaHost(
+        probe.$1,
+        port: probe.$2,
+        rejectIfEqualsHost: true,
+      );
+      if (ip != null && !rejectHosts.contains(ip)) return ip;
     }
     return null;
   }
@@ -377,6 +457,7 @@ class KitchenLocalServerService {
   static Future<String?> _probeLocalIpViaHost(
     String host, {
     int port = 80,
+    bool rejectIfEqualsHost = false,
   }) async {
     try {
       final socket = await Socket.connect(
@@ -384,9 +465,21 @@ class KitchenLocalServerService {
         port,
         timeout: const Duration(milliseconds: 600),
       );
+      // Local side of the socket — never the remote gateway/host.
       final ip = socket.address.address;
+      final remote = socket.remoteAddress.address;
       await socket.close();
-      if (!_isLoopback(ip) && !_isLinkLocal(ip) && !ip.contains(':')) {
+      if (rejectIfEqualsHost && (ip == host || ip == remote)) {
+        debugPrint(
+          '[KitchenServer] probe ignored (looks like remote/gateway) '
+          'local=$ip remote=$remote host=$host',
+        );
+        return null;
+      }
+      if (!_isLoopback(ip) &&
+          !_isLinkLocal(ip) &&
+          !ip.contains(':') &&
+          !_isLikelyGatewayIp(ip)) {
         debugPrint('[KitchenServer] probed local IP $ip via $host:$port');
         return ip;
       }
@@ -483,10 +576,26 @@ class KitchenLocalServerService {
   }
 
   static int _privateLanScore(String ip) {
-    if (ip.startsWith('192.168.')) return 0;
-    if (ip.startsWith('10.')) return 1;
-    if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.').hasMatch(ip)) return 2;
-    return 3;
+    var score = 0;
+    if (ip.startsWith('192.168.')) {
+      score = 0;
+    } else if (ip.startsWith('10.')) {
+      score = 1;
+    } else if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.').hasMatch(ip)) {
+      score = 2;
+    } else {
+      score = 3;
+    }
+    // Deprioritize typical router/gateway addresses (e.g. 192.168.100.1).
+    if (_isLikelyGatewayIp(ip)) score += 20;
+    return score;
+  }
+
+  static bool _isLikelyGatewayIp(String ip) {
+    final parts = ip.split('.');
+    if (parts.length != 4) return false;
+    final last = int.tryParse(parts[3]);
+    return last == 1 || last == 254;
   }
 
   static bool _isLoopback(String ip) =>
@@ -603,4 +712,16 @@ class _LanIpCandidate {
   final String ip;
   final String interfaceName;
   final _LanInterfaceKind kind;
+}
+
+class _LanDiscoveryResult {
+  const _LanDiscoveryResult({
+    required this.rankedIps,
+    required this.ownedIps,
+    required this.gatewayIp,
+  });
+
+  final List<String> rankedIps;
+  final Set<String> ownedIps;
+  final String? gatewayIp;
 }

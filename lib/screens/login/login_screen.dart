@@ -94,16 +94,7 @@ late LoginBloc loginBloc;
     });
   }
 
-  Future<void> _onSignIn() async {
-    FocusScope.of(context).unfocus();
-    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    setState(() => _isLoading = true);
-    // Auth wiring can be connected to LoginRepository here.
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-  }
 
   @override
   Widget build(BuildContext context) {

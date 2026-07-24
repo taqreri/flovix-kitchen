@@ -161,4 +161,15 @@ CREATE TABLE IF NOT EXISTS $_table (
     if (id.isEmpty) return;
     await deleteByIds([id]);
   }
+
+  /// Wipe all kitchen tickets (used on logout).
+  Future<void> clearAll() async {
+    try {
+      final db = await database;
+      await db.delete(_table);
+    } catch (e, st) {
+      debugPrint('[KitchenOrderDatabase] clearAll failed: $e');
+      debugPrint('$st');
+    }
+  }
 }

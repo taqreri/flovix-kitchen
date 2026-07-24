@@ -1,12 +1,16 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flovix_kitchen/bloc/dashboard/dashboard_bloc.dart';
+import 'package:flovix_kitchen/bloc/dashboard/dashboard_state.dart';
+import 'package:flovix_kitchen/bloc/repository/dashboard_repository.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_local_server.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_order_model.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_order_store.dart';
 import 'package:flovix_kitchen/services/session_manager/session_controller.dart';
 import 'package:flovix_kitchen/utils/app_utils.dart';
 import 'package:flovix_kitchen/utils/colors/colors.dart';
+import 'package:flovix_kitchen/utils/enums.dart';
 import 'package:flovix_kitchen/utils/helper/divider.dart';
 import 'package:flovix_kitchen/utils/helper/helpers.dart';
 import 'package:flovix_kitchen/utils/images/app_images.dart';
@@ -14,6 +18,7 @@ import 'package:flovix_kitchen/utils/size_config.dart';
 import 'package:flovix_kitchen/widgets/kitchen_order_notes_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
 
@@ -30,6 +35,7 @@ class KitchenDisplayScreen extends StatefulWidget {
 
 class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
   KitchenLocalServerService? _server;
+  late final DashboardBloc _dashboardBloc;
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
 
@@ -43,11 +49,11 @@ class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
   void initState() {
     super.initState();
     final getIt = GetIt.instance;
+    _dashboardBloc = DashboardBloc(repository: getIt<DashboardRepository>());
     if (getIt.isRegistered<KitchenLocalServerService>()) {
       _server = getIt<KitchenLocalServerService>();
-      _server!.refreshLanIp().then((_) {
-        if (mounted) setState(() {});
-      });
+      // Logout stops the LAN server; start it again when KDS opens.
+      unawaited(_ensureServerRunning());
     }
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() => _now = DateTime.now());
@@ -60,10 +66,28 @@ class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
     _searchController.addListener(() => setState(() {}));
   }
 
+  Future<void> _ensureServerRunning() async {
+    final server = _server;
+    if (server == null) return;
+    try {
+      if (!server.isRunning) {
+        debugPrint('[KDS] local server not running — starting…');
+        await server.start(port: KitchenLocalServerService.defaultPort);
+      } else {
+        await server.refreshLanIp();
+      }
+    } catch (e, st) {
+      debugPrint('[KDS] failed to start local server: $e');
+      debugPrint('$st');
+    }
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     _clockTimer?.cancel();
     _connectivitySub?.cancel();
+    _dashboardBloc.close();
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -120,58 +144,95 @@ class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: GlobalColors.kdsPageBg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _KdsHeader(
-              now: _now,
-              searchController: _searchController,
-              searchFocus: _searchFocus,
-              server: _server,
-              onRefreshIp: () async {
-                await _server?.refreshLanIp();
-                if (mounted) setState(() {});
-                return _server?.displayBaseUrl;
-              },
-            ),
-            Expanded(
-              child: StreamBuilder<List<KitchenOrderTicket>>(
-                stream: KitchenOrderStore.instance.stream,
-                initialData: KitchenOrderStore.instance.orders,
-                builder: (context, snapshot) {
-                  final allOrders = snapshot.data ?? const [];
-                  final counts = _counts(allOrders);
-                  final filtered = _applyFilters(allOrders);
+    return BlocProvider.value(
+      value: _dashboardBloc,
+      child: BlocListener<DashboardBloc, DashboardState>(
+        listenWhen: (previous, current) =>
+            previous.logoutEnum != current.logoutEnum,
+        listener: (context, state) async {
+          if (state.logoutEnum == LogoutEnum.success) {
+            await AppUtils.logoutAndClearAll(context);
+          } else if (state.logoutEnum == LogoutEnum.error) {
+            AppUtils.showFlushBar(
+              state.message.isNotEmpty
+                  ? state.message
+                  : 'Internal Server Error',
+              context,
+            );
+          }
+        },
+        child: BlocBuilder<DashboardBloc, DashboardState>(
+          buildWhen: (previous, current) =>
+              previous.logoutEnum != current.logoutEnum,
+          builder: (context, state) {
+            return Stack(
+              children: [
+                Scaffold(
+                  backgroundColor: GlobalColors.kdsPageBg,
+                  body: SafeArea(
+                    child: Column(
+                      children: [
+                        _KdsHeader(
+                          now: _now,
+                          searchController: _searchController,
+                          searchFocus: _searchFocus,
+                          server: _server,
+                          onRefreshIp: () async {
+                            await _ensureServerRunning();
+                            return _server?.displayBaseUrl;
+                          },
+                          onLogoutTap: () => AppUtils.showLogoutDialog(
+                            context,
+                            dashboardBloc: _dashboardBloc,
+                          ),
+                        ),
+                        Expanded(
+                          child: StreamBuilder<List<KitchenOrderTicket>>(
+                            stream: KitchenOrderStore.instance.stream,
+                            initialData: KitchenOrderStore.instance.orders,
+                            builder: (context, snapshot) {
+                              final allOrders = snapshot.data ?? const [];
+                              final counts = _counts(allOrders);
+                              final filtered = _applyFilters(allOrders);
 
-                  return Column(
-                    children: [
-                      _KdsFilterBar(
-                        filter: _filter,
-                        viewMode: _viewMode,
-                        counts: counts,
-                        onFilterChanged: (value) =>
-                            setState(() => _filter = value),
-                        onViewModeChanged: (value) =>
-                            setState(() => _viewMode = value),
-                      ),
-                      Expanded(
-                        child: filtered.isEmpty
-                            ? _EmptyOrders(
-                                hasAny: allOrders.isNotEmpty,
-                                server: _server,
-                              )
-                            : _viewMode == _KdsViewMode.grid
-                            ? _OrdersGrid(orders: filtered)
-                            : _OrdersList(orders: filtered),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+                              return Column(
+                                children: [
+                                  _KdsFilterBar(
+                                    filter: _filter,
+                                    viewMode: _viewMode,
+                                    counts: counts,
+                                    onFilterChanged: (value) =>
+                                        setState(() => _filter = value),
+                                    onViewModeChanged: (value) =>
+                                        setState(() => _viewMode = value),
+                                  ),
+                                  Expanded(
+                                    child: filtered.isEmpty
+                                        ? _EmptyOrders(
+                                            hasAny: allOrders.isNotEmpty,
+                                            server: _server,
+                                          )
+                                        : _viewMode == _KdsViewMode.grid
+                                            ? _OrdersGrid(orders: filtered)
+                                            : _OrdersList(orders: filtered),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (state.logoutEnum == LogoutEnum.loading)
+                  const ColoredBox(
+                    color: Color(0x66000000),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -257,6 +318,7 @@ class _KdsHeader extends StatelessWidget {
     required this.searchFocus,
     required this.server,
     required this.onRefreshIp,
+    required this.onLogoutTap,
   });
 
   final DateTime now;
@@ -264,6 +326,7 @@ class _KdsHeader extends StatelessWidget {
   final FocusNode searchFocus;
   final KitchenLocalServerService? server;
   final Future<String?> Function() onRefreshIp;
+  final VoidCallback onLogoutTap;
 
   @override
   Widget build(BuildContext context) {
@@ -272,8 +335,14 @@ class _KdsHeader extends StatelessWidget {
     final running = server?.isRunning ?? false;
     final lanIp = server?.lanIp;
     final hasLanIp = lanIp != null && lanIp.isNotEmpty;
-    final isLoopback = lanIp == '127.0.0.1' || (lanIp?.startsWith('127.') ?? false);
+    final isLoopback =
+        lanIp == '127.0.0.1' || (lanIp?.startsWith('127.') ?? false);
+    final isLikelyGateway = _isLikelyGatewayIp(lanIp);
     final url = server?.displayBaseUrl ?? 'http://127.0.0.1:18200';
+    final candidates = server?.candidateIps ?? const <String>[];
+    final betterCandidates = candidates
+        .where((ip) => ip != lanIp && !_isLikelyGatewayIp(ip) && ip != '127.0.0.1')
+        .toList();
 
     return Container(
       color: GlobalColors.whiteColor,
@@ -407,18 +476,43 @@ class _KdsHeader extends StatelessWidget {
                 running: running,
                 hasLanIp: hasLanIp,
                 isLoopback: isLoopback,
+                isLikelyGateway: isLikelyGateway,
                 url: hasLanIp ? url : 'Detecting IP…',
                 onPressed: () async {
                   final refreshed = await onRefreshIp();
                   final copyUrl = refreshed ?? server?.displayBaseUrl;
                   if (!context.mounted) return;
-                  if (running && copyUrl != null && copyUrl.isNotEmpty) {
+                  if ((server?.isRunning ?? false) &&
+                      copyUrl != null &&
+                      copyUrl.isNotEmpty) {
+                    final host = Uri.tryParse(copyUrl)?.host ?? '';
+                    if (_isLikelyGatewayIp(host)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            betterCandidates.isNotEmpty
+                                ? 'Warning: $host looks like router IP. Try: ${betterCandidates.map((e) => 'http://$e:${server?.port ?? 18200}').join(', ')}'
+                                : 'Warning: $host often is the router, not this kitchen device. Tap refresh after Wi‑Fi is connected.',
+                          ),
+                          duration: const Duration(seconds: 5),
+                        ),
+                      );
+                      return;
+                    }
                     await Clipboard.setData(ClipboardData(text: copyUrl));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Copied $copyUrl')),
                       );
                     }
+                  } else if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Server could not start. Check network and try again.',
+                        ),
+                      ),
+                    );
                   }
                 },
               ),
@@ -450,43 +544,69 @@ class _KdsHeader extends StatelessWidget {
                 color: GlobalColors.searchIcon,
               ),
               buildHorizontalDivider(context: context, fraction: 0.01),
-              CircleAvatar(
-                radius: SizeConfig.width(context, 0.016),
-                backgroundColor: GlobalColors.primaryColor.withValues(
-                  alpha: 0.15,
+              InkWell(
+                onTap: onLogoutTap,
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.width(context, 0.02),
                 ),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                  style: TextStyle(
-                    color: GlobalColors.primaryColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: SizeConfig.width(context, GlobalColors.pixel14),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SizeConfig.width(context, 0.006),
+                    vertical: SizeConfig.height(context, 0.004),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: SizeConfig.width(context, 0.016),
+                        backgroundColor: GlobalColors.primaryColor.withValues(
+                          alpha: 0.15,
+                        ),
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                          style: TextStyle(
+                            color: GlobalColors.primaryColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: SizeConfig.width(
+                              context,
+                              GlobalColors.pixel14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      buildHorizontalDivider(context: context, fraction: 0.008),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              color: GlobalColors.usernameColor,
+                              fontWeight: FontWeight.w400,
+                              fontSize: SizeConfig.width(
+                                context,
+                                GlobalColors.pixel16,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'MANAGER',
+                            style: TextStyle(
+                              color: GlobalColors.kdsMuted,
+                              fontWeight: FontWeight.w700,
+                              fontSize: SizeConfig.width(
+                                context,
+                                GlobalColors.pixel10,
+                              ),
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              buildHorizontalDivider(context: context, fraction: 0.008),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    name,
-                    style: TextStyle(
-                      color: GlobalColors.usernameColor,
-                      fontWeight: FontWeight.w400,
-                      fontSize: SizeConfig.width(context, GlobalColors.pixel16),
-                    ),
-                  ),
-                  Text(
-                    'MANAGER',
-                    style: TextStyle(
-                      color: GlobalColors.kdsMuted,
-                      fontWeight: FontWeight.w700,
-                      fontSize: SizeConfig.width(context, GlobalColors.pixel10),
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -501,6 +621,7 @@ class _ServerIpChip extends StatelessWidget {
     required this.running,
     required this.hasLanIp,
     required this.isLoopback,
+    required this.isLikelyGateway,
     required this.url,
     required this.onPressed,
   });
@@ -508,11 +629,18 @@ class _ServerIpChip extends StatelessWidget {
   final bool running;
   final bool hasLanIp;
   final bool isLoopback;
+  final bool isLikelyGateway;
   final String url;
   final Future<void> Function() onPressed;
 
   @override
   Widget build(BuildContext context) {
+    final color = !running
+        ? GlobalColors.searchIcon
+        : (isLikelyGateway || isLoopback)
+            ? const Color(0xFFB45309)
+            : GlobalColors.kdsCancelled;
+
     return Material(
       color: GlobalColors.kdsPageBg,
       borderRadius: BorderRadius.circular(SizeConfig.width(context, 0.02)),
@@ -529,22 +657,24 @@ class _ServerIpChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                running ? Icons.dns_rounded : Icons.cloud_off_outlined,
+                isLikelyGateway
+                    ? Icons.warning_amber_rounded
+                    : (running ? Icons.dns_rounded : Icons.cloud_off_outlined),
                 size: SizeConfig.width(context, 0.014),
-                color: hasLanIp && !isLoopback
-                    ? GlobalColors.kdsCancelled
-                    : GlobalColors.searchIcon,
+                color: color,
               ),
               buildHorizontalDivider(context: context, fraction: 0.006),
               Text(
                 running ? url : 'Server stopped',
                 style: TextStyle(
-                  color: GlobalColors.textTimeColor,
+                  color: isLikelyGateway
+                      ? const Color(0xFFB45309)
+                      : GlobalColors.textTimeColor,
                   fontWeight: FontWeight.w600,
                   fontSize: SizeConfig.width(context, GlobalColors.pixel12),
                 ),
               ),
-              if (hasLanIp) ...[
+              if (hasLanIp && !isLikelyGateway) ...[
                 buildHorizontalDivider(context: context, fraction: 0.006),
                 Icon(
                   Icons.copy_rounded,
@@ -558,6 +688,14 @@ class _ServerIpChip extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isLikelyGatewayIp(String? ip) {
+  if (ip == null || ip.isEmpty) return false;
+  final parts = ip.split('.');
+  if (parts.length != 4) return false;
+  final last = int.tryParse(parts[3]);
+  return last == 1 || last == 254;
 }
 
 class _KdsFilterBar extends StatelessWidget {
