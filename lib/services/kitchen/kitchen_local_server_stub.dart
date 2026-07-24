@@ -6,10 +6,11 @@ class KitchenLocalServerService {
 
   bool get isRunning => false;
   int get port => defaultPort;
-  String? get lanIp => null;
-  List<String> get candidateIps => const [];
+  String? get lanIp => '127.0.0.1';
+  List<String> get candidateIps => const ['127.0.0.1'];
   bool get hasUsableLanIp => false;
-  String get displayBaseUrl => 'http://<SET_LAN_IP>:$defaultPort';
+  bool get discoveryComplete => true;
+  String get displayBaseUrl => 'http://127.0.0.1:$defaultPort';
 
   Future<void> start({int port = defaultPort, int maxAttempts = 8}) async {}
 

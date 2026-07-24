@@ -315,6 +315,11 @@ class _LoginFormCard extends StatelessWidget {
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
               onFieldSubmitted: (_) => pinFocus.requestFocus(),
+                onChanged: (value) {
+                  context
+                      .read<LoginBloc>()
+                      .add(EmailChanged(email: value??""));
+                },
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'Email is required';
@@ -332,6 +337,11 @@ class _LoginFormCard extends StatelessWidget {
               isPassword: true,
               textInputAction: TextInputAction.done,
               onFieldSubmitted: (_) => onSignIn(),
+              onChanged: (value) {
+                context
+                    .read<LoginBloc>()
+                    .add(PasswordChanged(password: value??""));
+              },
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'PIN is required';

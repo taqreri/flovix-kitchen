@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'kitchen_order_store.dart';
 
@@ -12,23 +15,27 @@ class KitchenLocalServerService {
   KitchenLocalServerService();
 
   static const int defaultPort = 18200;
+  static const _prefsLanIpKey = 'kitchen_last_lan_ip';
+  static const _androidIpChannel = MethodChannel('com.flovix.kitchen/local_ip');
 
   HttpServer? _server;
   int _port = defaultPort;
   String? _lanIp;
   List<String> _candidateIps = const [];
   StreamSubscription<HttpRequest>? _sub;
+  bool _discoveryComplete = false;
 
   bool get isRunning => _server != null;
   int get port => _port;
   String? get lanIp => _lanIp;
   List<String> get candidateIps => List.unmodifiable(_candidateIps);
+  bool get discoveryComplete => _discoveryComplete;
 
-  /// Never advertise loopback to POS — other devices cannot reach 127.0.0.1.
+  /// Prefer a real LAN IP. Fall back to loopback so UI is never stuck.
   String get displayBaseUrl {
     final ip = _lanIp;
-    if (ip == null || ip.isEmpty || _isLoopback(ip)) {
-      return 'http://<SET_LAN_IP>:$_port';
+    if (ip == null || ip.isEmpty) {
+      return 'http://127.0.0.1:$_port';
     }
     return 'http://$ip:$_port';
   }
@@ -40,7 +47,6 @@ class KitchenLocalServerService {
     int port = defaultPort,
     int maxAttempts = 8,
   }) async {
-    // Hot restart often leaves the previous socket bound; close first.
     await stop();
     await refreshLanIp();
 
@@ -66,6 +72,9 @@ class KitchenLocalServerService {
           '[KitchenServer] listening on http://0.0.0.0:$tryPort '
           '(LAN: $displayBaseUrl, candidates: $_candidateIps)',
         );
+        if (!hasUsableLanIp) {
+          unawaited(_retryLanIpDiscovery());
+        }
         return;
       } on SocketException catch (e, st) {
         lastError = e;
@@ -79,7 +88,6 @@ class KitchenLocalServerService {
           '[KitchenServer] port $tryPort in use, retrying '
           '(${attempt + 1}/$maxAttempts)…',
         );
-        // Brief pause helps after hot restart while the old socket releases.
         await Future<void>.delayed(Duration(milliseconds: 120 * (attempt + 1)));
       } catch (e, st) {
         debugPrint('[KitchenServer] failed to start: $e');
@@ -99,11 +107,23 @@ class KitchenLocalServerService {
 
   static bool _isAddressInUse(SocketException e) {
     final code = e.osError?.errorCode;
-    // 98 = Linux/Android EADDRINUSE, 48 = macOS EADDRINUSE, 10048 = Windows.
     return code == 98 ||
         code == 48 ||
         code == 10048 ||
         (e.message.toLowerCase().contains('address already in use'));
+  }
+
+  Future<void> _retryLanIpDiscovery() async {
+    for (var i = 0; i < 5; i++) {
+      await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
+      await refreshLanIp();
+      if (hasUsableLanIp) {
+        debugPrint(
+          '[KitchenServer] LAN IP resolved after retry: $displayBaseUrl',
+        );
+        return;
+      }
+    }
   }
 
   Future<void> stop() async {
@@ -116,72 +136,357 @@ class KitchenLocalServerService {
   Future<void> refreshLanIp() async {
     final ips = await _discoverLanIps();
     _candidateIps = ips;
-    _lanIp = ips.isNotEmpty ? ips.first : null;
+    if (ips.isNotEmpty) {
+      _lanIp = ips.first;
+      await _cacheLanIp(ips.first);
+    } else {
+      // Wi‑Fi off at boot — reuse last known LAN IP so UI isn't blank.
+      final cached = await _readCachedLanIp();
+      if (cached != null) {
+        _lanIp = cached;
+        _candidateIps = [cached];
+        debugPrint('[KitchenServer] using cached LAN IP $cached');
+      } else {
+        // Last resort: local loopback so chip shows a real address.
+        _lanIp = '127.0.0.1';
+        _candidateIps = const ['127.0.0.1'];
+        debugPrint(
+          '[KitchenServer] no network interface — falling back to 127.0.0.1',
+        );
+      }
+    }
+    _discoveryComplete = true;
+    debugPrint(
+      '[KitchenServer] refreshLanIp → lanIp=$_lanIp '
+      'candidates=$_candidateIps display=$displayBaseUrl',
+    );
   }
 
-  /// Prefer real LAN IPv4 from network interfaces; fall back to Wi‑Fi plugin.
-  static Future<List<String>> _discoverLanIps() async {
-    final found = <String>{};
+  static Future<void> _cacheLanIp(String ip) async {
+    if (_isLoopback(ip) || _isLinkLocal(ip)) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsLanIpKey, ip);
+    } catch (_) {}
+  }
 
+  static Future<String?> _readCachedLanIp() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ip = prefs.getString(_prefsLanIpKey);
+      if (ip == null || ip.isEmpty || _isLoopback(ip) || _isLinkLocal(ip)) {
+        return null;
+      }
+      return ip;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<List<String>> _discoverLanIps() async {
+    final candidates = <_LanIpCandidate>[];
+
+    void addCandidate({
+      required String ip,
+      required String interfaceName,
+      required _LanInterfaceKind kind,
+    }) {
+      final trimmed = ip.trim();
+      if (trimmed.isEmpty || _isLoopback(trimmed) || _isLinkLocal(trimmed)) {
+        return;
+      }
+      if (trimmed.contains(':')) return;
+      if (candidates.any((c) => c.ip == trimmed)) return;
+      candidates.add(
+        _LanIpCandidate(
+          ip: trimmed,
+          interfaceName: interfaceName,
+          kind: kind,
+        ),
+      );
+    }
+
+    // 0) Android native — works with Wi‑Fi OFF + Ethernet/USB/hotspot ON.
+    for (final row in await _androidNativeIps()) {
+      final transport = (row['transport'] ?? 'other').toLowerCase();
+      addCandidate(
+        ip: row['ip'] ?? '',
+        interfaceName: row['interface'] ?? transport,
+        kind: switch (transport) {
+          'ethernet' => _LanInterfaceKind.ethernet,
+          'hotspot' => _LanInterfaceKind.lan,
+          'wifi' => _LanInterfaceKind.wifi,
+          'cellular' => _LanInterfaceKind.other,
+          _ => _LanInterfaceKind.lan,
+        },
+      );
+    }
+
+    // 1) Dart OS interface list.
     try {
       final interfaces = await NetworkInterface.list(
-        includeLinkLocal: false,
+        includeLinkLocal: true,
+        includeLoopback: false,
         type: InternetAddressType.IPv4,
+      );
+      debugPrint(
+        '[KitchenServer] interfaces: '
+        '${interfaces.map((i) => '${i.name}=${i.addresses.map((a) => a.address).join("|")}').join(", ")}',
       );
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        // Skip virtual / tunnel adapters when possible.
-        if (name.contains('loopback') ||
-            name.contains('vethernet') ||
-            name.contains('docker') ||
-            name.contains('vmware') ||
-            name.contains('virtualbox') ||
-            name.contains('hyper-v') ||
-            name.contains('tailscale') ||
-            name.contains('utun') ||
-            name.contains('tun')) {
-          continue;
-        }
+        if (_shouldSkipInterface(name)) continue;
         for (final addr in iface.addresses) {
           if (addr.type != InternetAddressType.IPv4) continue;
-          if (_isLoopback(addr.address)) continue;
-          if (_isLinkLocal(addr.address)) continue;
-          found.add(addr.address);
+          addCandidate(
+            ip: addr.address,
+            interfaceName: name,
+            kind: _classifyInterface(name),
+          );
         }
       }
     } catch (e) {
       debugPrint('[KitchenServer] NetworkInterface.list failed: $e');
     }
 
+    // 2) Wi‑Fi plugin (null when Wi‑Fi is off — expected).
+    await _ensureNetworkInfoPermission();
     try {
-      final wifiIp = await NetworkInfo().getWifiIP();
-      if (wifiIp != null &&
-          wifiIp.isNotEmpty &&
-          !_isLoopback(wifiIp) &&
-          !_isLinkLocal(wifiIp)) {
-        // Prefer Wi‑Fi IP by putting it first.
-        return [
-          wifiIp,
-          ...found.where((ip) => ip != wifiIp),
-        ];
+      final info = NetworkInfo();
+      final wifiIp = await info.getWifiIP();
+      debugPrint('[KitchenServer] getWifiIP=$wifiIp');
+      if (wifiIp != null) {
+        addCandidate(
+          ip: wifiIp,
+          interfaceName: 'wifi',
+          kind: _LanInterfaceKind.wifi,
+        );
+      }
+
+      final gateway = await info.getWifiGatewayIP();
+      debugPrint('[KitchenServer] getWifiGatewayIP=$gateway');
+      if (gateway != null && gateway.isNotEmpty && !_isLoopback(gateway)) {
+        final viaGateway = await _probeLocalIpViaHost(gateway);
+        if (viaGateway != null) {
+          addCandidate(
+            ip: viaGateway,
+            interfaceName: 'gateway-route',
+            kind: _LanInterfaceKind.lan,
+          );
+        }
       }
     } catch (e) {
-      debugPrint('[KitchenServer] getWifiIP failed: $e');
+      debugPrint('[KitchenServer] network_info_plus failed: $e');
     }
 
-    // Prefer common private LAN ranges.
-    final sorted = found.toList()
-      ..sort((a, b) {
-        int score(String ip) {
-          if (ip.startsWith('192.168.')) return 0;
-          if (ip.startsWith('10.')) return 1;
-          if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.').hasMatch(ip)) return 2;
-          return 3;
-        }
+    // 3) Route probe.
+    final probed = await _probeOutboundLocalIp();
+    if (probed != null) {
+      addCandidate(
+        ip: probed,
+        interfaceName: 'route',
+        kind: _LanInterfaceKind.lan,
+      );
+    }
 
-        return score(a).compareTo(score(b));
-      });
-    return sorted;
+    // 4) Desktop CLI fallbacks.
+    for (final ip in await _platformCommandIps()) {
+      addCandidate(
+        ip: ip,
+        interfaceName: 'cli',
+        kind: _LanInterfaceKind.lan,
+      );
+    }
+
+    candidates.sort((a, b) {
+      final kindCmp = a.kind.priority.compareTo(b.kind.priority);
+      if (kindCmp != 0) return kindCmp;
+      return _privateLanScore(a.ip).compareTo(_privateLanScore(b.ip));
+    });
+
+    final deduped = <String>[];
+    for (final c in candidates) {
+      if (!deduped.contains(c.ip)) deduped.add(c.ip);
+    }
+
+    debugPrint(
+      '[KitchenServer] LAN candidates: '
+      '${candidates.map((c) => '${c.ip}(${c.interfaceName}/${c.kind.name})').join(', ')}',
+    );
+    return deduped;
+  }
+
+  static Future<List<Map<String, String>>> _androidNativeIps() async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final raw = await _androidIpChannel.invokeMethod<List<dynamic>>(
+        'getLocalIpv4Addresses',
+      );
+      if (raw == null) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map)
+            {
+              for (final e in item.entries) '${e.key}': '${e.value}',
+            },
+      ];
+    } catch (e) {
+      debugPrint('[KitchenServer] Android native IP channel failed: $e');
+      return const [];
+    }
+  }
+
+  static Future<void> _ensureNetworkInfoPermission() async {
+    try {
+      if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
+        final location = await Permission.locationWhenInUse.status;
+        if (!location.isGranted) {
+          await Permission.locationWhenInUse.request();
+        }
+      }
+      if (Platform.isAndroid) {
+        try {
+          final nearby = await Permission.nearbyWifiDevices.status;
+          if (!nearby.isGranted) {
+            await Permission.nearbyWifiDevices.request();
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[KitchenServer] permission request failed: $e');
+    }
+  }
+
+  static Future<String?> _probeOutboundLocalIp() async {
+    const probes = <(String, int)>[
+      ('192.168.1.1', 80),
+      ('192.168.0.1', 80),
+      ('192.168.100.1', 80),
+      ('10.0.0.1', 80),
+      ('8.8.8.8', 53),
+      ('1.1.1.1', 53),
+    ];
+
+    for (final probe in probes) {
+      final ip = await _probeLocalIpViaHost(probe.$1, port: probe.$2);
+      if (ip != null) return ip;
+    }
+    return null;
+  }
+
+  static Future<String?> _probeLocalIpViaHost(
+    String host, {
+    int port = 80,
+  }) async {
+    try {
+      final socket = await Socket.connect(
+        host,
+        port,
+        timeout: const Duration(milliseconds: 600),
+      );
+      final ip = socket.address.address;
+      await socket.close();
+      if (!_isLoopback(ip) && !_isLinkLocal(ip) && !ip.contains(':')) {
+        debugPrint('[KitchenServer] probed local IP $ip via $host:$port');
+        return ip;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<List<String>> _platformCommandIps() async {
+    final found = <String>[];
+    try {
+      if (Platform.isMacOS) {
+        for (final iface in ['en0', 'en1', 'en2', 'en3', 'en4', 'en5', 'en6']) {
+          final result = await Process.run('ipconfig', ['getifaddr', iface]);
+          if (result.exitCode == 0) {
+            final ip = '${result.stdout}'.trim();
+            if (ip.isNotEmpty) found.add(ip);
+          }
+        }
+      } else if (Platform.isWindows) {
+        final result = await Process.run('ipconfig', []);
+        if (result.exitCode == 0) {
+          final re = RegExp(r'IPv4 Address[.\s]*:\s*([\d.]+)');
+          for (final m in re.allMatches('${result.stdout}')) {
+            found.add(m.group(1)!);
+          }
+        }
+      } else if (Platform.isLinux) {
+        final result = await Process.run('hostname', ['-I']);
+        if (result.exitCode == 0) {
+          found.addAll(
+            '${result.stdout}'
+                .trim()
+                .split(RegExp(r'\s+'))
+                .where((s) => s.isNotEmpty),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[KitchenServer] platform IP command failed: $e');
+    }
+    return found;
+  }
+
+  static bool _shouldSkipInterface(String name) {
+    return name == 'lo' ||
+        (name.startsWith('lo') && name.length <= 3) ||
+        name.startsWith('utun') ||
+        name.startsWith('tun') ||
+        name.startsWith('awdl') ||
+        name.startsWith('llw') ||
+        name.contains('loopback') ||
+        name.contains('vethernet') ||
+        name.contains('docker') ||
+        name.contains('vmware') ||
+        name.contains('virtualbox') ||
+        name.contains('hyper-v') ||
+        name.contains('tailscale') ||
+        name.contains('rmnet') ||
+        name.contains('ccmni') ||
+        name.contains('pdp_ip') ||
+        name.contains('wwan') ||
+        name.contains('cellular');
+  }
+
+  static _LanInterfaceKind _classifyInterface(String name) {
+    if (name.startsWith('eth') ||
+        name.contains('ethernet') ||
+        name.startsWith('lan') ||
+        name.startsWith('usb') ||
+        name.contains('rndis') ||
+        name.contains('enx')) {
+      return _LanInterfaceKind.ethernet;
+    }
+
+    if (name.startsWith('ap') ||
+        name.contains('softap') ||
+        name.startsWith('swlan')) {
+      return _LanInterfaceKind.lan;
+    }
+
+    if (name.contains('wlan') ||
+        name.contains('wifi') ||
+        name.contains('wi-fi') ||
+        name.startsWith('wl') ||
+        name.contains('p2p')) {
+      return _LanInterfaceKind.wifi;
+    }
+
+    if (name.startsWith('en')) {
+      return _LanInterfaceKind.lan;
+    }
+
+    return _LanInterfaceKind.other;
+  }
+
+  static int _privateLanScore(String ip) {
+    if (ip.startsWith('192.168.')) return 0;
+    if (ip.startsWith('10.')) return 1;
+    if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.').hasMatch(ip)) return 2;
+    return 3;
   }
 
   static bool _isLoopback(String ip) =>
@@ -276,4 +581,26 @@ class KitchenLocalServerService {
     response.write(jsonEncode(body));
     await response.close();
   }
+}
+
+enum _LanInterfaceKind {
+  ethernet(0),
+  lan(1),
+  wifi(2),
+  other(3);
+
+  const _LanInterfaceKind(this.priority);
+  final int priority;
+}
+
+class _LanIpCandidate {
+  const _LanIpCandidate({
+    required this.ip,
+    required this.interfaceName,
+    required this.kind,
+  });
+
+  final String ip;
+  final String interfaceName;
+  final _LanInterfaceKind kind;
 }

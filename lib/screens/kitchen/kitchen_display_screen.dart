@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_local_server.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_order_model.dart';
 import 'package:flovix_kitchen/services/kitchen/kitchen_order_store.dart';
@@ -36,6 +37,7 @@ class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
   _KdsViewMode _viewMode = _KdsViewMode.grid;
   DateTime _now = DateTime.now();
   Timer? _clockTimer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   @override
   void initState() {
@@ -50,12 +52,18 @@ class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
+    // Wi‑Fi may come online after cold start — refresh advertised IP.
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((_) async {
+      await _server?.refreshLanIp();
+      if (mounted) setState(() {});
+    });
     _searchController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _connectivitySub?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -125,6 +133,7 @@ class _KitchenDisplayScreenState extends State<KitchenDisplayScreen> {
               onRefreshIp: () async {
                 await _server?.refreshLanIp();
                 if (mounted) setState(() {});
+                return _server?.displayBaseUrl;
               },
             ),
             Expanded(
@@ -254,14 +263,17 @@ class _KdsHeader extends StatelessWidget {
   final TextEditingController searchController;
   final FocusNode searchFocus;
   final KitchenLocalServerService? server;
-  final Future<void> Function() onRefreshIp;
+  final Future<String?> Function() onRefreshIp;
 
   @override
   Widget build(BuildContext context) {
     final name = SessionController.employeeName;
     final timeLabel = DateFormat('d MMM, h:mm a').format(now);
     final running = server?.isRunning ?? false;
-    final url = server?.displayBaseUrl ?? '';
+    final lanIp = server?.lanIp;
+    final hasLanIp = lanIp != null && lanIp.isNotEmpty;
+    final isLoopback = lanIp == '127.0.0.1' || (lanIp?.startsWith('127.') ?? false);
+    final url = server?.displayBaseUrl ?? 'http://127.0.0.1:18200';
 
     return Container(
       color: GlobalColors.whiteColor,
@@ -356,7 +368,7 @@ class _KdsHeader extends StatelessWidget {
           ),
           Row(
             children: [
-              Container(
+            /*  Container(
                 height: SizeConfig.height(context, 0.06),
                 padding: EdgeInsets.symmetric(
                   horizontal: SizeConfig.width(context, 0.01),
@@ -390,20 +402,35 @@ class _KdsHeader extends StatelessWidget {
                   ],
                 ),
               ),
+              buildHorizontalDivider(context: context, fraction: 0.01),*/
+              _ServerIpChip(
+                running: running,
+                hasLanIp: hasLanIp,
+                isLoopback: isLoopback,
+                url: hasLanIp ? url : 'Detecting IP…',
+                onPressed: () async {
+                  final refreshed = await onRefreshIp();
+                  final copyUrl = refreshed ?? server?.displayBaseUrl;
+                  if (!context.mounted) return;
+                  if (running && copyUrl != null && copyUrl.isNotEmpty) {
+                    await Clipboard.setData(ClipboardData(text: copyUrl));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Copied $copyUrl')),
+                      );
+                    }
+                  }
+                },
+              ),
               buildHorizontalDivider(context: context, fraction: 0.01),
               IconButton(
-                tooltip: running ? 'Server: $url' : 'Server stopped',
+                tooltip: running
+                    ? (hasLanIp
+                          ? 'Server: ${server?.displayBaseUrl}'
+                          : 'Server running — detecting LAN IP…')
+                    : 'Server stopped',
                 onPressed: () async {
-                  if (url.isNotEmpty && running) {
-                    await Clipboard.setData(ClipboardData(text: url));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text('Copied $url')));
-                    }
-                  } else {
-                    await onRefreshIp();
-                  }
+                  await onRefreshIp();
                 },
                 icon: Badge(
                   isLabelVisible: running,
@@ -464,6 +491,70 @@ class _KdsHeader extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ServerIpChip extends StatelessWidget {
+  const _ServerIpChip({
+    required this.running,
+    required this.hasLanIp,
+    required this.isLoopback,
+    required this.url,
+    required this.onPressed,
+  });
+
+  final bool running;
+  final bool hasLanIp;
+  final bool isLoopback;
+  final String url;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: GlobalColors.kdsPageBg,
+      borderRadius: BorderRadius.circular(SizeConfig.width(context, 0.02)),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(SizeConfig.width(context, 0.02)),
+        child: Container(
+          height: SizeConfig.height(context, 0.06),
+          padding: EdgeInsets.symmetric(
+            horizontal: SizeConfig.width(context, 0.012),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                running ? Icons.dns_rounded : Icons.cloud_off_outlined,
+                size: SizeConfig.width(context, 0.014),
+                color: hasLanIp && !isLoopback
+                    ? GlobalColors.kdsCancelled
+                    : GlobalColors.searchIcon,
+              ),
+              buildHorizontalDivider(context: context, fraction: 0.006),
+              Text(
+                running ? url : 'Server stopped',
+                style: TextStyle(
+                  color: GlobalColors.textTimeColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: SizeConfig.width(context, GlobalColors.pixel12),
+                ),
+              ),
+              if (hasLanIp) ...[
+                buildHorizontalDivider(context: context, fraction: 0.006),
+                Icon(
+                  Icons.copy_rounded,
+                  size: SizeConfig.width(context, 0.012),
+                  color: GlobalColors.searchIcon,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
